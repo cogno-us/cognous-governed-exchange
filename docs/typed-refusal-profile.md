@@ -22,3 +22,9 @@ Candidate remains nonselected. Both authorizations false. Operational trust,
 publication and production HOLD. C0 check-to-commit limitations and optional
 same-host cooperative C1 only; no C2/C3 or real settlement. Updating this profile
 does not change the frozen hub package or complete any PV acceptance gate.
+
+The first hosted candidate run rejected rewritten tracked Replay egg-info after
+editable dependency installation (eight setup errors, not test passes; Python
+3.11 companion cancelled). The corrected workflow imports exact clean source via
+PYTHONPATH and installs only pinned external test dependencies. The source gate
+remains intact; hosted qualification must be rerun at the corrected head.

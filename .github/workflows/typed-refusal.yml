@@ -49,8 +49,8 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: ${{ matrix.python }}
-      - run: python -m pip install -e '.[dev]'
-      - run: python -m pip install -e pinned/replay -e pinned/odes -e pinned/pack
+      # Import clean pinned source directly: editable installs rewrite tracked egg-info.
+      - run: python -m pip install pytest==8.3.5 pydantic==2.11.9 jsonschema==4.23.0
       - name: Verify exact source checkouts
         run: |
           test "$(git -C pinned/control-plane rev-parse HEAD)" = "c7f122ba3a6e39f9268a7163c99be3ee514cd97e"
@@ -60,7 +60,7 @@ jobs:
       - run: python -m pytest -q candidate_qualification/test_typed_refusal_profile.py --junitxml=refusal-results.xml
         env:
           PYTHONDONTWRITEBYTECODE: '1'
-          PYTHONPATH: .
+          PYTHONPATH: .:pinned/replay/src:pinned/odes/src:pinned/pack/src
           GAX_RUNTIME_COMPATIBILITY_PROFILE: typed-refusal-candidate-20261015
           MOLTBOT_SAFE_CONTROL_PLANE_ROOT: ${{ github.workspace }}/pinned/control-plane
           MOLTBOT_SAFE_ROOT: ${{ github.workspace }}/pinned/executor

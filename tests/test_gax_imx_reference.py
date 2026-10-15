@@ -231,7 +231,9 @@ def test_run_exchange_uses_supplied_destination_state_restart_and_redelivery(tmp
         observation_clock=synthetic_observation_clock,
     )
     assert exact_redelivery["execution"]["attempt_status"] == "hold"
-    assert exact_redelivery["execution"]["owner_message_id"] == "m1"
+    assert exact_redelivery["execution"]["newly_executed"] is False
+    with sqlite3.connect(tmp_path / "exchange.sqlite") as conn:
+        assert conn.execute("SELECT message_id FROM effect_owners").fetchone()[0] == "m1"
     assert len(_effect_rows(restarted_destination)) == 1
 
 

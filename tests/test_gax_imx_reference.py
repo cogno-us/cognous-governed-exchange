@@ -210,7 +210,9 @@ def test_run_exchange_uses_supplied_destination_state_restart_and_redelivery(tmp
         observation_policy=synthetic_observation_policy(),
         observation_clock=synthetic_observation_clock,
     )
-    assert second["execution"]["attempt_status"] == "reconciled"
+    assert second["execution"]["attempt_status"] == "hold"
+    assert second["execution"]["reason"] == "effect_owned_by_another_message"
+    assert second["execution"]["owner_message_id"] == "m1"
     assert second["execution"]["newly_executed"] is False
     assert len(_effect_rows(restarted_destination)) == 1
 
@@ -228,7 +230,8 @@ def test_run_exchange_uses_supplied_destination_state_restart_and_redelivery(tmp
         observation_policy=synthetic_observation_policy(),
         observation_clock=synthetic_observation_clock,
     )
-    assert exact_redelivery["execution"]["attempt_status"] == "reconciled"
+    assert exact_redelivery["execution"]["attempt_status"] == "hold"
+    assert exact_redelivery["execution"]["owner_message_id"] == "m1"
     assert len(_effect_rows(restarted_destination)) == 1
 
 

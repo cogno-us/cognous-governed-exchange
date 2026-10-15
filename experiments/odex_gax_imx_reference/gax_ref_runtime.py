@@ -685,7 +685,7 @@ def run_exchange(message: dict[str, Any], bundle: dict[str, Any], registry: Loca
         return {"assessment": assessment, "execution": {"attempted": False, "reason": "observation_policy_required"}, "successor_packet": None}
     artifacts = _run_current_request(message=message, bundle=bundle, manifest=manifest, destination=destination, store_path=store_path, resolver=resolver, evaluation_time=evaluation_time, execution_policy_factory=execution_policy_factory, observation_policy=observation_policy, observation_clock=observation_clock, mutate_resolver_after_decision=mutate_resolver_after_decision, lose_ack=lose_ack, partial_delivery=partial_delivery, store=store, fault_after_dispatch=fault_after_dispatch, fault_evidence_once=fault_evidence_once, generation_fence=generation_fence, lineage_generation=lineage_generation)
     if artifacts.get("fault")=="effect_owned_by_another_message":
-        return {"assessment":assessment,"execution":{"attempted":False,"attempt_status":"hold",
+        return {"assessment":assessment,"execution":{"attempted":False,"newly_executed":False,"attempt_status":"hold",
             "reason":"effect_owned_by_another_message","effect_id":artifacts["decision"].effect_id,
             "owner_message_id":artifacts["owner_message_id"],"retry_eligible":False,
             "recovery_route":"resume_original_exchange"},"successor_packet":None}

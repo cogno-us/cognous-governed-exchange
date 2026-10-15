@@ -375,3 +375,21 @@ def test_replay_odes_failure_after_commit_retries_evidence_without_repeating_eff
     assert retried["execution"]["newly_executed"] is False
     assert len(effect_rows(destination)) == 1
     assert_artifacts(retried)
+
+
+def test_new_message_cannot_redispatch_unresolved_effect(tmp_path):
+    destination=destination_at(tmp_path)
+    original_commit=destination.commit
+    def timeout(*args,**kwargs):raise TimeoutError('synthetic unresolved original')
+    destination.commit=timeout
+    _,_,first=run_success(tmp_path,message_id='original-unresolved',destination=destination)
+    assert first['execution']['attempt_status']=='unknown'
+    assert not effect_rows(destination)
+    destination.commit=original_commit
+    _,_,second=run_success(tmp_path,message_id='replacement-message',destination=destination)
+    assert second['execution']['attempted'] is False
+    assert second['execution']['reason']=='effect_owned_by_another_message'
+    assert second['execution']['owner_message_id']=='original-unresolved'
+    assert not effect_rows(destination)
+    with sqlite3.connect(tmp_path/'exchange.sqlite') as c:
+        assert c.execute('SELECT count(*) FROM effect_claim_refusals').fetchone()[0]==1

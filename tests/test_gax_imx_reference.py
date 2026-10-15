@@ -4,6 +4,7 @@ from experiments.odex_gax_imx_reference.synthetic_fixture import synthetic_obser
 
 import copy
 import json
+import sqlite3
 import os
 from pathlib import Path
 
@@ -210,7 +211,9 @@ def test_run_exchange_uses_supplied_destination_state_restart_and_redelivery(tmp
         observation_policy=synthetic_observation_policy(),
         observation_clock=synthetic_observation_clock,
     )
-    assert second["execution"]["attempt_status"] == "reconciled"
+    assert second["execution"]["attempt_status"] == "hold"
+    assert second["execution"]["reason"] == "effect_owned_by_another_message"
+    assert second["execution"]["owner_message_id"] == "m1"
     assert second["execution"]["newly_executed"] is False
     assert len(_effect_rows(restarted_destination)) == 1
 
@@ -228,7 +231,10 @@ def test_run_exchange_uses_supplied_destination_state_restart_and_redelivery(tmp
         observation_policy=synthetic_observation_policy(),
         observation_clock=synthetic_observation_clock,
     )
-    assert exact_redelivery["execution"]["attempt_status"] == "reconciled"
+    assert exact_redelivery["execution"]["attempt_status"] == "hold"
+    assert exact_redelivery["execution"]["newly_executed"] is False
+    with sqlite3.connect(tmp_path / "exchange.sqlite") as conn:
+        assert conn.execute("SELECT message_id FROM effect_owners").fetchone()[0] == "m1"
     assert len(_effect_rows(restarted_destination)) == 1
 
 

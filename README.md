@@ -143,4 +143,4 @@ An explicit `merged-producers-v1` profile selects the accepted newer Control Pla
 
 ## Cross component qualification
 
-Executable integration suites and harnesses moved to the [qualification repository](https://github.com/cogno-us/cognous-stack-qualification/tree/f99bb7591f52ca5a26d64a50d9ef466b4749ad4e/suites/cognous-governed-exchange). See [the path migration map](CROSS_COMPONENT_TESTS.md) for current commands and source identity rules. Component-local tests remain here; historical qualification results retain their original scope.
+Executable integration suites and harnesses moved to the [qualification repository](https://github.com/cogno-us/cognous-stack-qualification/tree/43fb81dc3ec0da17402bef274dcec1831cc5e160/suites/cognous-governed-exchange). See [the path migration map](CROSS_COMPONENT_TESTS.md) for current commands and source identity rules. Component-local tests remain here; historical qualification results retain their original scope.

@@ -600,6 +600,11 @@ def _run_current_request(*, message: dict[str, Any], bundle: dict[str, Any], man
         )
         return {"status": decision.result, "decision": decision, "result": None, "destination_effects": {}, "proposal_record": proposal_record, "cp_record": cp_record, "moltbot_record": None, **pipe}
 
+    if store is not None:
+        owner=store.claim_effect(message,decision.effect_id)
+        if owner is not None:
+            return {"status":"hold","fault":"effect_owned_by_another_message",
+                    "owner_message_id":owner,"decision":decision}
     if mutate_resolver_after_decision:
         mutate_resolver_after_decision(resolver)
 
@@ -679,6 +684,11 @@ def run_exchange(message: dict[str, Any], bundle: dict[str, Any], registry: Loca
     if observation_policy is None:
         return {"assessment": assessment, "execution": {"attempted": False, "reason": "observation_policy_required"}, "successor_packet": None}
     artifacts = _run_current_request(message=message, bundle=bundle, manifest=manifest, destination=destination, store_path=store_path, resolver=resolver, evaluation_time=evaluation_time, execution_policy_factory=execution_policy_factory, observation_policy=observation_policy, observation_clock=observation_clock, mutate_resolver_after_decision=mutate_resolver_after_decision, lose_ack=lose_ack, partial_delivery=partial_delivery, store=store, fault_after_dispatch=fault_after_dispatch, fault_evidence_once=fault_evidence_once, generation_fence=generation_fence, lineage_generation=lineage_generation)
+    if artifacts.get("fault")=="effect_owned_by_another_message":
+        return {"assessment":assessment,"execution":{"attempted":False,"attempt_status":"hold",
+            "reason":"effect_owned_by_another_message","effect_id":artifacts["decision"].effect_id,
+            "owner_message_id":artifacts["owner_message_id"],"retry_eligible":False,
+            "recovery_route":"resume_original_exchange"},"successor_packet":None}
     result = artifacts.get("result")
     status = artifacts["status"]
     if artifacts.get("fault") == "after_dispatch_before_workflow_persistence":
@@ -809,6 +819,8 @@ class TransactionalExchangeStore:
         with sqlite3.connect(self.path) as conn:
             conn.executescript(
                 """
+                CREATE TABLE IF NOT EXISTS effect_owners(effect_id TEXT PRIMARY KEY,message_id TEXT NOT NULL,message_digest TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS effect_claim_refusals(effect_id TEXT NOT NULL,message_id TEXT NOT NULL,message_digest TEXT NOT NULL,owner_message_id TEXT NOT NULL,reason TEXT NOT NULL,PRIMARY KEY(effect_id,message_id,message_digest));
                 CREATE TABLE IF NOT EXISTS messages(message_id TEXT PRIMARY KEY, message_digest TEXT NOT NULL, conversation_id TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS message_workflows(message_id TEXT PRIMARY KEY,message_digest TEXT NOT NULL,conversation_id TEXT NOT NULL,status TEXT NOT NULL,proposal_commitment TEXT,decision_id TEXT,effect_id TEXT,attempt_id TEXT,proposal_json TEXT NOT NULL,decision_json TEXT NOT NULL,request_json TEXT,result_json TEXT,cp_record_json TEXT NOT NULL,moltbot_json TEXT);
                 CREATE TABLE IF NOT EXISTS dispatch_checkpoints(message_id TEXT PRIMARY KEY,message_digest TEXT NOT NULL,conversation_id TEXT NOT NULL,state TEXT NOT NULL,proposal_commitment TEXT,decision_id TEXT,effect_id TEXT,attempt_id TEXT,proposal_json TEXT NOT NULL,decision_json TEXT NOT NULL,request_json TEXT,result_json TEXT,cp_record_json TEXT NOT NULL,moltbot_json TEXT,faults_json TEXT);
@@ -817,6 +829,25 @@ class TransactionalExchangeStore:
                 CREATE TABLE IF NOT EXISTS heads(conversation_id TEXT PRIMARY KEY, packet_id TEXT NOT NULL, packet_digest TEXT NOT NULL, state_version INTEGER NOT NULL);
                 """
             )
+
+            # Adopt retained associations on upgrade; the first owner remains the
+            # reconciliation route. Never use a fresh message to clear this barrier.
+            for table in ("dispatch_checkpoints", "message_workflows"):
+                conn.execute(f"INSERT OR IGNORE INTO effect_owners SELECT effect_id,message_id,message_digest FROM {table} WHERE effect_id IS NOT NULL ORDER BY message_id")
+
+    def claim_effect(self, message: dict[str, Any], effect_id: str) -> str | None:
+        """Claim one effect before dispatch; return its existing owner on conflict."""
+        with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute("INSERT OR IGNORE INTO effect_owners VALUES(?,?,?)",
+                         (effect_id,message["message_id"],message["message_digest"]))
+            row=conn.execute("SELECT message_id,message_digest FROM effect_owners WHERE effect_id=?",(effect_id,)).fetchone()
+            conflict=(row["message_id"],row["message_digest"]) != (message["message_id"],message["message_digest"])
+            if conflict:
+                conn.execute("INSERT OR IGNORE INTO effect_claim_refusals VALUES(?,?,?,?,?)",
+                    (effect_id,message["message_id"],message["message_digest"],row["message_id"],"effect_owned_by_another_message"))
+            conn.execute("COMMIT")
+            return row["message_id"] if conflict else None
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.path, timeout=10, isolation_level=None)

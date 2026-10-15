@@ -7,6 +7,7 @@ import importlib
 import json
 import os
 import sqlite3
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -46,12 +47,52 @@ if RUNTIME_COMPATIBILITY_PROFILE == "merged-producers-v1":
     REPLAY_REVISION = "459e4ba62fca49364aebb0050cd5fb2dd5a71bfa"
     ODES_REVISION = "c5e9a0f3695ae836b803be06c46d2c669642ee03"
     EVIDENCE_PACK_REVISION = "b4baccd823d2a73be276c1de745b19cf7c56a0d6"
+elif RUNTIME_COMPATIBILITY_PROFILE == "typed-refusal-candidate-20261015":
+    CP_REVISION = "c7f122ba3a6e39f9268a7163c99be3ee514cd97e"
+    MOLTBOT_REVISION = "309e194c1b0a3de23e11e20133e6eaf88875e48a"
+    REPLAY_REVISION = "83fbaf2a0f6f071aca1ea0af859eb8fc6385c26a"
+    ODES_REVISION = "25c7ad608c2e6fd9f450e075db6bbf3ee4091a49"
+    EVIDENCE_PACK_REVISION = "1e789c7d67a897097445faef1813fb0cd22d55e5"
 elif RUNTIME_COMPATIBILITY_PROFILE != "persistence-v1":
     raise RuntimeError("unsupported GAX runtime compatibility profile")
 
 
 def _repo_path(env_name: str, default: str) -> Path:
     return Path(os.environ.get(env_name, default)).resolve()
+
+
+def _verify_refusal_profile_sources() -> None:
+    """Refuse false candidate provenance; this is source identity, not trust."""
+    expected = {
+        "agent_control_plane.bounded": CP_REVISION,
+        "engine.producer_contract": MOLTBOT_REVISION,
+        "agent_replay_bundle.importers": REPLAY_REVISION,
+        "odes.exporter": ODES_REVISION,
+        "agent_governance_evidence_pack.importer": EVIDENCE_PACK_REVISION,
+    }
+    for name, revision in expected.items():
+        module = importlib.import_module(name)
+        directory = Path(module.__file__).resolve().parent
+        actual = subprocess.check_output(
+            ["git", "-C", str(directory), "rev-parse", "HEAD"], text=True, timeout=10
+        ).strip()
+        changed = subprocess.check_output(
+            ["git", "-C", str(directory), "status", "--porcelain", "--untracked-files=no"],
+            text=True, timeout=10,
+        ).strip()
+        subprocess.run(["git", "-C", str(directory), "ls-files", "--error-unmatch", Path(module.__file__).name],
+                       check=True, capture_output=True, timeout=10)
+        if actual != revision or changed:
+            raise RuntimeError(f"candidate source identity mismatch: {name}")
+    manifest = Path(os.environ["UPSTREAM_MANIFEST_EXAMPLE"]).resolve()
+    actual = subprocess.check_output(["git", "-C", str(manifest.parent), "rev-parse", "HEAD"],
+                                     text=True, timeout=10).strip()
+    changed = subprocess.check_output(["git", "-C", str(manifest.parent), "diff", "HEAD", "--", str(manifest)],
+                                      text=True, timeout=10).strip()
+    subprocess.run(["git", "-C", str(manifest.parent), "ls-files", "--error-unmatch", manifest.name],
+                   check=True, capture_output=True, timeout=10)
+    if actual != MANIFEST_REVISION or changed:
+        raise RuntimeError("candidate source identity mismatch: manifest")
 
 
 def load_executor_runtime() -> dict[str, Any]:
@@ -64,6 +105,8 @@ def load_executor_runtime() -> dict[str, Any]:
         if path not in sys.path:
             sys.path.insert(0, path)
 
+    if RUNTIME_COMPATIBILITY_PROFILE == "typed-refusal-candidate-20261015":
+        _verify_refusal_profile_sources()
     producer = importlib.import_module("engine.producer_contract")
     cp = importlib.import_module("agent_control_plane.bounded")
     if producer.EXECUTOR_PRODUCER_PROFILE_ID != MOLTBOT_PRODUCER_PROFILE_ID:

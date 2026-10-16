@@ -53,12 +53,30 @@ elif RUNTIME_COMPATIBILITY_PROFILE == "typed-refusal-candidate-20261015":
     REPLAY_REVISION = "83fbaf2a0f6f071aca1ea0af859eb8fc6385c26a"
     ODES_REVISION = "25c7ad608c2e6fd9f450e075db6bbf3ee4091a49"
     EVIDENCE_PACK_REVISION = "1e789c7d67a897097445faef1813fb0cd22d55e5"
+elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-candidate-20261016":
+    CP_REVISION = "996baeb476c8745b1a58ddc968b9eecc6a39b76b"
+    MOLTBOT_REVISION = "fd6b76fa0e85feb5b67324114bf790d3a12fdaf1"
+    MANIFEST_REVISION = "e385f8c19b4444817a8b84b72ed6edbc37deb807"
+    REPLAY_REVISION = "3601fb218d5c02f5d86e55d2cf33983e5e130ac3"
+    ODES_REVISION = "dd2dc7e8f3fe74263917a0c67a40875daf3b0ce0"
+    EVIDENCE_PACK_REVISION = "8aba5a106ad119330950ccff97c55fa8492bc287"
 elif RUNTIME_COMPATIBILITY_PROFILE != "persistence-v1":
     raise RuntimeError("unsupported GAX runtime compatibility profile")
 
 
 def _repo_path(env_name: str, default: str) -> Path:
     return Path(os.environ.get(env_name, default)).resolve()
+
+
+def _workflow_options(runtime_authority_profile, allow_test_time=False):
+    """Configuration comes from the trusted caller, never the incoming message."""
+    if RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-candidate-20261016":
+        if runtime_authority_profile is None:
+            raise ValueError("security-runtime profile requires trusted runtime_authority_profile")
+        return {"runtime_authority_profile": runtime_authority_profile, "allow_test_time": allow_test_time}
+    if runtime_authority_profile is not None or allow_test_time:
+        raise ValueError("runtime authority options require the explicit security-runtime profile")
+    return {}
 
 
 def _verify_refusal_profile_sources() -> None:
@@ -105,7 +123,7 @@ def load_executor_runtime() -> dict[str, Any]:
         if path not in sys.path:
             sys.path.insert(0, path)
 
-    if RUNTIME_COMPATIBILITY_PROFILE == "typed-refusal-candidate-20261015":
+    if RUNTIME_COMPATIBILITY_PROFILE in {"typed-refusal-candidate-20261015", "security-runtime-candidate-20261016"}:
         _verify_refusal_profile_sources()
     producer = importlib.import_module("engine.producer_contract")
     cp = importlib.import_module("agent_control_plane.bounded")
@@ -621,7 +639,7 @@ def _recover_checkpoint(message: dict[str, Any], assessment: dict[str, Any], man
     return {"assessment": assessment, "execution": {"attempted": False, "reason": "checkpoint_without_dispatch_evidence", "attempt_status": "hold", "effect_id": checkpoint.get("effect_id"), "decision_id": checkpoint.get("decision_id")}, "successor_packet": None}
 
 
-def _run_current_request(*, message: dict[str, Any], bundle: dict[str, Any], manifest: dict[str, Any], destination: Any, store_path: Path, resolver: Any, evaluation_time: str, execution_policy_factory: Any, observation_policy: Any, observation_clock: Any = None, mutate_resolver_after_decision=None, lose_ack: bool = False, partial_delivery: bool = False, store: "TransactionalExchangeStore" | None = None, fault_after_dispatch: bool = False, fault_evidence_once: bool = False, generation_fence: Any = None, lineage_generation: int | None = None) -> dict[str, Any]:
+def _run_current_request(*, message: dict[str, Any], bundle: dict[str, Any], manifest: dict[str, Any], destination: Any, store_path: Path, resolver: Any, evaluation_time: str, execution_policy_factory: Any, observation_policy: Any, observation_clock: Any = None, mutate_resolver_after_decision=None, lose_ack: bool = False, partial_delivery: bool = False, store: "TransactionalExchangeStore" | None = None, fault_after_dispatch: bool = False, fault_evidence_once: bool = False, generation_fence: Any = None, lineage_generation: int | None = None, runtime_authority_profile: Any = None, allow_test_time: bool = False) -> dict[str, Any]:
     runtime = load_executor_runtime()
     cp = runtime["cp"]
     now = parse_time(evaluation_time)
@@ -629,7 +647,7 @@ def _run_current_request(*, message: dict[str, Any], bundle: dict[str, Any], man
     record_suffix = digest({"message_id": message["message_id"], "message_digest": message.get("message_digest"), "evaluation_time": evaluation_time})[-16:]
     record_store = cp.BoundedRecordStore(store_path.parent / f"control-plane-{message['message_id']}-{record_suffix}.json", proposal.run_id or "run-gax-imx")
     cp_destination = cp.LocalRefundDestination(store_path.parent / f"cp-placeholder-{message['message_id']}-{record_suffix}.json")
-    workflow = cp.BoundedAuthorizationWorkflow(manifest=manifest, resolver=resolver, destination=cp_destination, records=record_store, observation_policy=observation_policy)
+    workflow = cp.BoundedAuthorizationWorkflow(manifest=manifest, resolver=resolver, destination=cp_destination, records=record_store, observation_policy=observation_policy, **_workflow_options(runtime_authority_profile, allow_test_time))
     decision = workflow.decide(proposal, now=now)
     proposal_record = proposal.model_dump(mode="json", exclude_none=False)
     cp_record = record_store.load().model_dump(mode="json")
@@ -692,7 +710,8 @@ def _run_current_request(*, message: dict[str, Any], bundle: dict[str, Any], man
     return {"status": result.status, "result": result, "decision": decision, "request": request, "destination": destination, "destination_effects": {row["effect_id"]: row for row in _effect_rows(destination)}, "proposal_record": p, "cp_record": cp_record, "moltbot_record": moltbot, **pipe}
 
 
-def run_exchange(message: dict[str, Any], bundle: dict[str, Any], registry: LocalRegistry, destination: Any, *, evaluation_time: str, manifest: dict[str, Any], store_path: str | Path, resolver: Any | None = None, execution_policy_factory: Any | None = None, observation_policy: Any | None = None, observation_clock: Any = None, mutate_resolver_after_decision=None, lose_ack: bool = False, partial_delivery: bool = False, fault_after_dispatch: bool = False, fault_evidence_once: bool = False, generation_fence: Any = None, lineage_generation: int | None = None) -> dict[str, Any]:
+def run_exchange(message: dict[str, Any], bundle: dict[str, Any], registry: LocalRegistry, destination: Any, *, evaluation_time: str, manifest: dict[str, Any], store_path: str | Path, resolver: Any | None = None, execution_policy_factory: Any | None = None, observation_policy: Any | None = None, observation_clock: Any = None, mutate_resolver_after_decision=None, lose_ack: bool = False, partial_delivery: bool = False, fault_after_dispatch: bool = False, fault_evidence_once: bool = False, generation_fence: Any = None, lineage_generation: int | None = None, runtime_authority_profile: Any = None, allow_test_time: bool = False) -> dict[str, Any]:
+    _workflow_options(runtime_authority_profile, allow_test_time)
     store_path = Path(store_path)
     store = TransactionalExchangeStore(store_path)
     duplicate, err = store.record_message(message)
@@ -726,7 +745,7 @@ def run_exchange(message: dict[str, Any], bundle: dict[str, Any], registry: Loca
         return {"assessment": assessment, "execution": {"attempted": False, "reason": "execution_policy_factory_required"}, "successor_packet": None}
     if observation_policy is None:
         return {"assessment": assessment, "execution": {"attempted": False, "reason": "observation_policy_required"}, "successor_packet": None}
-    artifacts = _run_current_request(message=message, bundle=bundle, manifest=manifest, destination=destination, store_path=store_path, resolver=resolver, evaluation_time=evaluation_time, execution_policy_factory=execution_policy_factory, observation_policy=observation_policy, observation_clock=observation_clock, mutate_resolver_after_decision=mutate_resolver_after_decision, lose_ack=lose_ack, partial_delivery=partial_delivery, store=store, fault_after_dispatch=fault_after_dispatch, fault_evidence_once=fault_evidence_once, generation_fence=generation_fence, lineage_generation=lineage_generation)
+    artifacts = _run_current_request(message=message, bundle=bundle, manifest=manifest, destination=destination, store_path=store_path, resolver=resolver, evaluation_time=evaluation_time, execution_policy_factory=execution_policy_factory, observation_policy=observation_policy, observation_clock=observation_clock, mutate_resolver_after_decision=mutate_resolver_after_decision, lose_ack=lose_ack, partial_delivery=partial_delivery, store=store, fault_after_dispatch=fault_after_dispatch, fault_evidence_once=fault_evidence_once, generation_fence=generation_fence, lineage_generation=lineage_generation, runtime_authority_profile=runtime_authority_profile, allow_test_time=allow_test_time)
     if artifacts.get("fault")=="effect_owned_by_another_message":
         return {"assessment":assessment,"execution":{"attempted":False,"newly_executed":False,"attempt_status":"hold",
             "reason":"effect_owned_by_another_message","effect_id":artifacts["decision"].effect_id,
@@ -745,7 +764,7 @@ def run_exchange(message: dict[str, Any], bundle: dict[str, Any], registry: Loca
 def resume_original_exchange(message: dict[str, Any], *, manifest: dict[str, Any],
         store_path: str | Path, destination: Any, resolver: Any,
         execution_policy_factory: Any, observation_policy: Any,
-        evaluation_time: str, observation_clock: Any = None) -> dict[str, Any]:
+        evaluation_time: str, observation_clock: Any = None, runtime_authority_profile: Any = None, allow_test_time: bool = False) -> dict[str, Any]:
     """Explicit current observation of the original attempted effect, not redelivery.
 
     Keeps original exports immutable. The accepted executor must see the owning
@@ -753,6 +772,7 @@ def resume_original_exchange(message: dict[str, Any], *, manifest: dict[str, Any
     artifact is saved separately. Reconciliation adds CP evidence, unlike an
     evidence-only read/export, which must leave CP records unchanged.
     """
+    _workflow_options(runtime_authority_profile, allow_test_time)
     if observation_policy is None:
         raise ValueError("observation_policy is required")
     now = parse_time(evaluation_time)
@@ -786,7 +806,7 @@ def resume_original_exchange(message: dict[str, Any], *, manifest: dict[str, Any
     workflow = cp.BoundedAuthorizationWorkflow(manifest=manifest, resolver=resolver,
         destination=cp.LocalRefundDestination(store_path.parent / "recovery-placeholder.json"),
         records=cp.BoundedRecordStore(candidates[0], proposal.run_id),
-        observation_policy=observation_policy)
+        observation_policy=observation_policy, **_workflow_options(runtime_authority_profile, allow_test_time))
     executor = runtime["PinnedControlPlaneExecutor"](workflow=workflow, destination=destination,
         policy=execution_policy_factory(request.operation), observation_clock=observation_clock)
     result = executor.execute(envelope=request, proposal=proposal, decision=decision, now=now)

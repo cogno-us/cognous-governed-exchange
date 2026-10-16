@@ -25,7 +25,7 @@ Cross-component test commands below now run in a disposable checkout assembled b
 
 An experimental GAX/IMX reference that connects governed messages, recipient assessment, bounded execution and retained evidence. It is separate from the constitutional authority repository: this workbench implements exchange behavior and local transport, not an institution or a constitution.
 
-**Implementation and selection (2026-10-10):** The current [hub component lock](https://github.com/cogno-us/cognous-open-control-stack/blob/main/component-lock.json) selects GAX `a1cbc7b28f702283b0e4f3192bb43e4a9e618ebf`. This repository has separately accepted optional generation-fence source `814927dac65a2078d5efee6bbf07c46091844822`; that source is **not automatically selected or enabled** by the hub. The earlier `9984d9011568ccdf3d562fa9760ad41368947b34` and hub `5737267d...` are **historical qualification references**, retained below for provenance. [Release status](https://github.com/cogno-us/cognous-open-control-stack/blob/main/docs/release-status.md) governs release claims; deployment trust remains [HOLD](https://github.com/cogno-us/cognous-stack-orchestrator/issues/30).
+**Implementation and selection:** the [current hub component lock](https://github.com/cogno-us/cognous-open-control-stack/blob/main/component-lock.json) defines the selected revision. Optional generation-fence source is not automatically selected or enabled by the hub. Deployment trust remains [HOLD](https://github.com/cogno-us/cognous-stack-orchestrator/issues/30).
 
 ## Purpose and intended users
 
@@ -64,11 +64,11 @@ The accepted source implementation is [`generation_fence.py`](experiments/odex_g
 
 For a complete environment with exact dependencies, follow the [hub developer quickstart](https://github.com/cogno-us/cognous-open-control-stack/blob/main/docs/quickstart.md). The [exchange demo](experiments/odex_gax_imx_reference/README.md) has separate prerequisites and writes an illustrative JSON artifact; it is not the transported, effect-producing qualification. Consult the [transport profile](experiments/governed_message_transport/profile.md) before treating receipt as any stronger state.
 
-## Evidence and supported scope
+## Scope and compatibility
 
-The hub selects accepted merge `9984d9011568ccdf3d562fa9760ad41368947b34`: bounded refund exchange 0.1.0, retained artifacts 1.1.0 and recipient result 1.0.0. The public runtime uses supported executor interfaces, not upstream test helpers. Authority Context comes from [the separate constitutional repository](https://github.com/cogno-us/cognous-institutional-governance).
+Use the [current component lock](https://github.com/cogno-us/cognous-open-control-stack/blob/main/component-lock.json) for the selected revision. bounded refund exchange 0.1.0, retained artifacts 1.1.0 and recipient result 1.0.0. The public runtime uses supported executor interfaces, not upstream test helpers. Authority Context comes from [the separate constitutional repository](https://github.com/cogno-us/cognous-institutional-governance).
 
-The accepted [hub persistence-generation evidence](https://github.com/cogno-us/cognous-open-control-stack/blob/5737267d94d2b445735c95e8480a31de73a2abe8/examples/control-plane-store-adoption/qualification-summary.json) records 915 Python tests in each of two repetitions, 35 matrix entries satisfying their gates and 120 separate mocked OpenShell tests. Those are aggregate hub results, not a per-component test count or a claim of production readiness. Optional behavioral layers receive static checks only. The [support ledger](https://github.com/cogno-us/cognous-open-control-stack/blob/main/docs/release-status.md) separates implementation, execution and adoption.
+Test results, run commentary and historical qualification records are maintained in the [central test hub](https://github.com/cogno-us/cognous-stack-qualification/blob/main/results/readme-commentary/index.md). Read them against their recorded source revisions; source selection and deployment approval are separate decisions.
 
 ## Limitations and deployment decisions
 
@@ -144,3 +144,6 @@ An explicit `merged-producers-v1` profile selects the accepted newer Control Pla
 ## Cross component qualification
 
 Executable integration suites and harnesses moved to the [qualification repository](https://github.com/cogno-us/cognous-stack-qualification/tree/39f038435afdd71ba162860faa5718d90d7bde64/suites/cognous-governed-exchange). See [the path migration map](CROSS_COMPONENT_TESTS.md) for current commands and source identity rules. Component-local tests remain here; historical qualification results retain their original scope.
+
+<!-- Retained anchors for existing documentation links. -->
+<a id="evidence-and-supported-scope"></a>

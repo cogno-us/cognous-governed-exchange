@@ -65,8 +65,22 @@ elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-candidate-20261016":
     REPLAY_REVISION = "3601fb218d5c02f5d86e55d2cf33983e5e130ac3"
     ODES_REVISION = "dd2dc7e8f3fe74263917a0c67a40875daf3b0ce0"
     EVIDENCE_PACK_REVISION = "8aba5a106ad119330950ccff97c55fa8492bc287"
+elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-f5b-20261016":
+    # Separate F5b merged generation; the 996baeb4 profile above is kept so
+    # retained evidence stays reproducible at its historical pins.
+    CP_REVISION = "a34c3dc26f84a767a55f9d5c89dc0b53e63fefa5"
+    MOLTBOT_REVISION = "e20f92e104aba2ba6ad06120d8549c6170eaf63f"
+    MANIFEST_REVISION = "2c36bcd0b620dbfe7ad924bc7196a3f0c04c5c5e"
+    REPLAY_REVISION = "79ba16d48b9be1e059b3045989c7df960c3df1c2"
+    ODES_REVISION = "eb83220c82f942e429a5e3ef5f677fdd5057ef84"
+    EVIDENCE_PACK_REVISION = "893aca8dfb27ba5c5f3e833f2d29210ca7fc92e3"
 elif RUNTIME_COMPATIBILITY_PROFILE != "persistence-v1":
     raise RuntimeError("unsupported GAX runtime compatibility profile")
+
+# Profiles that require trusted runtime-authority configuration.
+SECURITY_RUNTIME_PROFILES = frozenset({"security-runtime-candidate-20261016", "security-runtime-f5b-20261016"})
+# Profiles whose candidate sources are verified before import.
+STRICT_SOURCE_PROFILES = frozenset({"typed-refusal-candidate-20261015", *SECURITY_RUNTIME_PROFILES})
 
 
 def _repo_path(env_name: str, default: str) -> Path:
@@ -75,7 +89,7 @@ def _repo_path(env_name: str, default: str) -> Path:
 
 def _workflow_options(runtime_authority_profile, allow_test_time=False):
     """Configuration comes from the trusted caller, never the incoming message."""
-    if RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-candidate-20261016":
+    if RUNTIME_COMPATIBILITY_PROFILE in SECURITY_RUNTIME_PROFILES:
         if runtime_authority_profile is None:
             raise ValueError("security-runtime profile requires trusted runtime_authority_profile")
         return {"runtime_authority_profile": runtime_authority_profile, "allow_test_time": allow_test_time}
@@ -291,7 +305,7 @@ def load_executor_runtime() -> dict[str, Any]:
         if path not in sys.path:
             sys.path.insert(0, path)
 
-    if RUNTIME_COMPATIBILITY_PROFILE in {"typed-refusal-candidate-20261015", "security-runtime-candidate-20261016"}:
+    if RUNTIME_COMPATIBILITY_PROFILE in STRICT_SOURCE_PROFILES:
         _verify_refusal_profile_sources(cp_root, molt_root)
     producer = importlib.import_module("engine.producer_contract")
     cp = importlib.import_module("agent_control_plane.bounded")

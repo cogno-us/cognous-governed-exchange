@@ -165,8 +165,8 @@ def _repo(path: Path, files: dict[str, str]) -> str:
     return _git(path, "rev-parse", "HEAD")
 
 
-@pytest.fixture
-def fake_checkouts(tmp_path, monkeypatch):
+@pytest.fixture(params=sorted(runtime.STRICT_SOURCE_PROFILES))
+def fake_checkouts(request, tmp_path, monkeypatch):
     marker = tmp_path / "planted-code-ran"
     roots, revisions = {}, {}
     for key, (package, module) in MODULES.items():
@@ -186,7 +186,7 @@ def fake_checkouts(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "path", list(sys.path))
     for name in [m for m in sys.modules if m.split(".")[0] in TOP_LEVEL]:
         monkeypatch.delitem(sys.modules, name)
-    monkeypatch.setattr(runtime, "RUNTIME_COMPATIBILITY_PROFILE", "typed-refusal-candidate-20261015")
+    monkeypatch.setattr(runtime, "RUNTIME_COMPATIBILITY_PROFILE", request.param)
     monkeypatch.setattr(runtime, "CP_REVISION", revisions["control_plane"])
     monkeypatch.setattr(runtime, "MOLTBOT_REVISION", revisions["runtime"])
     monkeypatch.setattr(runtime, "REPLAY_REVISION", revisions["replay"])
@@ -309,3 +309,69 @@ def test_bytecode_cache_refusal_names_the_offending_file(fake_checkouts):
     (cache / "exporter.cpython-312.pyc").write_bytes(b"")
     with pytest.raises(RuntimeError, match=r"__pycache__.*PYTHONDONTWRITEBYTECODE=1"):
         runtime.load_executor_runtime()
+
+
+# F3R: F5b security-runtime generation ---------------------------------------
+
+def _load_with_profile(monkeypatch, profile):
+    """Execute a fresh copy of gax_ref_runtime under one compatibility profile."""
+    monkeypatch.setenv("GAX_RUNTIME_COMPATIBILITY_PROFILE", profile)
+    name = "experiments.odex_gax_imx_reference._profile_probe"
+    spec = importlib.util.spec_from_file_location(name, runtime.__file__)
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, name, module)
+    spec.loader.exec_module(module)
+    return module
+
+
+PINS = ("CP_REVISION", "MOLTBOT_REVISION", "MANIFEST_REVISION", "REPLAY_REVISION", "ODES_REVISION",
+        "EVIDENCE_PACK_REVISION")
+F5B_PINS = {
+    "CP_REVISION": "a34c3dc26f84a767a55f9d5c89dc0b53e63fefa5",
+    "MOLTBOT_REVISION": "e20f92e104aba2ba6ad06120d8549c6170eaf63f",
+    "MANIFEST_REVISION": "2c36bcd0b620dbfe7ad924bc7196a3f0c04c5c5e",
+    "REPLAY_REVISION": "79ba16d48b9be1e059b3045989c7df960c3df1c2",
+    "ODES_REVISION": "eb83220c82f942e429a5e3ef5f677fdd5057ef84",
+    "EVIDENCE_PACK_REVISION": "893aca8dfb27ba5c5f3e833f2d29210ca7fc92e3",
+}
+RETAINED_SECURITY_PINS = {
+    "CP_REVISION": "996baeb476c8745b1a58ddc968b9eecc6a39b76b",
+    "MOLTBOT_REVISION": "fd6b76fa0e85feb5b67324114bf790d3a12fdaf1",
+    "MANIFEST_REVISION": "e385f8c19b4444817a8b84b72ed6edbc37deb807",
+    "REPLAY_REVISION": "3601fb218d5c02f5d86e55d2cf33983e5e130ac3",
+    "ODES_REVISION": "dd2dc7e8f3fe74263917a0c67a40875daf3b0ce0",
+    "EVIDENCE_PACK_REVISION": "8aba5a106ad119330950ccff97c55fa8492bc287",
+}
+
+
+@pytest.mark.parametrize("profile, pins", [
+    ("security-runtime-f5b-20261016", F5B_PINS),
+    ("security-runtime-candidate-20261016", RETAINED_SECURITY_PINS),
+])
+def test_security_runtime_generations_select_exact_separate_pins(monkeypatch, profile, pins):
+    module = _load_with_profile(monkeypatch, profile)
+    assert {name: getattr(module, name) for name in PINS} == pins
+    assert not set(F5B_PINS.values()) & set(RETAINED_SECURITY_PINS.values())
+
+
+@pytest.mark.parametrize("profile", ["security-runtime-f5b-20261016", "security-runtime-candidate-20261016"])
+def test_security_runtime_generations_require_trusted_configuration(monkeypatch, profile):
+    module = _load_with_profile(monkeypatch, profile)
+    assert profile in module.SECURITY_RUNTIME_PROFILES and profile in module.STRICT_SOURCE_PROFILES
+    with pytest.raises(ValueError, match="requires trusted runtime_authority_profile"):
+        module._workflow_options(None)
+    sentinel = object()
+    assert module._workflow_options(sentinel, True) == {"runtime_authority_profile": sentinel, "allow_test_time": True}
+
+
+def test_historical_profiles_reject_runtime_authority_options(monkeypatch):
+    for profile in ("persistence-v1", "merged-producers-v1", "typed-refusal-candidate-20261015"):
+        module = _load_with_profile(monkeypatch, profile)
+        assert module.RUNTIME_COMPATIBILITY_PROFILE not in module.SECURITY_RUNTIME_PROFILES
+        with pytest.raises(ValueError, match="explicit security-runtime profile"):
+            module._workflow_options(object())
+
+
+def test_unknown_profile_still_refused(monkeypatch):
+    with pytest.raises(RuntimeError, match="unsupported GAX runtime compatibility profile"):
+        _load_with_profile(monkeypatch, "security-runtime-f5b-20261017")

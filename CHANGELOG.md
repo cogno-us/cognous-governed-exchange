@@ -37,3 +37,11 @@
 - Pinned generation-fence workflow actions to full SHAs and disabled persisted checkout credentials.
 - Documented unmeasured historical revision labels, the historical legacy continuity loader, first-head predecessor trust and transport-adapter incompatibility with the V1 security profile.
 - No component revision constants changed. Requires requalification; no release or production authorization.
+
+
+## F3R F5b security-runtime generation (16 October 2026)
+
+- Added separate opt-in profile `security-runtime-f5b-20261016` pinning CP `a34c3dc2`, runtime `e20f92e1`, Manifest `2c36bcd0`, Replay `79ba16d4`, ODES `eb83220c` and Evidence Pack `893aca8d`.
+- `security-runtime-candidate-20261016` and all historical profiles are unchanged.
+- The new profile requires trusted runtime-authority configuration and uses the F5b verify-before-import source checks; the source-identity tests now run under every strict profile.
+- Candidate component revision; requires F3 requalification, refreeze and re-review. No release or production authorization.

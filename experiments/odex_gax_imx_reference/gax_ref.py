@@ -4,6 +4,7 @@ import argparse
 import copy
 import hashlib
 import json
+import re
 import sqlite3
 import tempfile
 from dataclasses import dataclass, field
@@ -27,6 +28,14 @@ TRUSTED_TARGET = "urn:cognous:synthetic-account:customer-001"
 TRUSTED_PERMISSION = "refund.issue.routine"
 TRUSTED_GRANT_ID = "urn:cognous:grant:routine-1"
 EVAL = "2026-08-08T01:00:00Z"
+# Conservative message-identifier grammar. Identifiers are interpolated into
+# local store file names, so separators, dot segments, NUL and leading dots are
+# never understood.
+SAFE_MESSAGE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
+
+
+def message_id_is_safe(value: Any) -> bool:
+    return isinstance(value, str) and SAFE_MESSAGE_ID.fullmatch(value) is not None and ".." not in value
 
 
 def canonical_bytes(value: Any) -> bytes:
@@ -109,6 +118,10 @@ class LocalRegistry:
 
 
 class TransactionalExchangeStore:
+    """HISTORICAL / UNSUPPORTED legacy store; use gax_ref_runtime.TransactionalExchangeStore.
+
+    Its successor loader accepts a higher-version packet with no predecessor link.
+    """
     def __init__(self, path: str | Path):
         self.path = Path(path); self.path.parent.mkdir(parents=True, exist_ok=True)
         with sqlite3.connect(self.path) as con:
@@ -224,6 +237,7 @@ def assess_message(message: dict[str, Any], bundle: dict[str, Any], registry: Lo
         stages[stage] = "failed"; errors.append(code); return {"permitted_handling": handling, "stages": stages, "errors": errors, "message_received": True, "message_understood": stage not in {"structure", "profile"}}
     required = ["message_id", "conversation_id", "profile", "protocol_version", "message_type", "created_at", "expires_at", "sender", "recipient", "purpose", "requested_action", "operation_commitment", "proposal_commitment", "authority_refs", "evidence_refs", "content", "content_digest", "message_digest"]
     if any(k not in message for k in required): return fail("structure", "GAX-SCHEMA-MISSING-REQUIRED", "NOT_UNDERSTOOD")
+    if not message_id_is_safe(message["message_id"]): return fail("structure", "GAX-SCHEMA-MESSAGE-ID-UNSAFE", "NOT_UNDERSTOOD")
     if message["message_digest"] != digest({k: v for k, v in message.items() if k != "message_digest"}) or message["content_digest"] != digest(message["content"]): return fail("structure", "GAX-INTEGRITY-DIGEST", "NOT_UNDERSTOOD")
     stages["structure"] = "passed"
     if message["profile"] != PROFILE or message["protocol_version"] != PROTOCOL_VERSION or message["message_type"] not in SUPPORTED_TYPES: return fail("profile", "GAX-PROFILE-UNSUPPORTED-OR-DOWNGRADE", "NOT_UNDERSTOOD")
@@ -300,7 +314,9 @@ def run_exchange(message: dict[str, Any], bundle: dict[str, Any], registry: Loca
 def make_successor_packet(message: dict[str, Any], *, facts: dict[str, Any], state_version: int = 1, current_bundle: dict[str, Any] | None = None) -> dict[str, Any]:
     packet = {"packet_id": f"succ-{message['message_id']}-{state_version}", "profile": PROFILE, "schema_version": PROTOCOL_VERSION, "conversation_id": message.get("conversation_id"), "source_packet_id": message["message_id"], "source_commitment": digest(message), "predecessor_packet_id": None, "state_version": f"state-{state_version}", "relevant_decisions": [facts.get("decision_id")], "pending_effects": facts.get("pending_effects", []), "attempts": facts.get("attempts", {}), "unresolved_delivery": facts.get("unresolved_delivery"), "missing_evidence": [] if current_bundle else ["current_bundle_unavailable"], "next_proposed_work": "reconcile before any further execution"}; packet["packet_digest"] = digest({k: v for k, v in packet.items() if k != "packet_digest"}); return packet
 
-def load_successor_packet(packet: dict[str, Any], destination: DestinationState, *, predecessor: dict[str, Any], store_path: str | Path) -> dict[str, Any]: return TransactionalExchangeStore(store_path).accept_successor(packet, predecessor)
+def load_successor_packet(packet: dict[str, Any], destination: DestinationState, *, predecessor: dict[str, Any], store_path: str | Path) -> dict[str, Any]:
+    """HISTORICAL / UNSUPPORTED legacy loader; use gax_ref_runtime.load_successor_packet."""
+    return TransactionalExchangeStore(store_path).accept_successor(packet, predecessor)
 
 def run_demo(manifest_path: str, replay_path: str, out_path: str) -> dict[str, Any]:
     manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8")); bundle = json.loads(Path(replay_path).read_text(encoding="utf-8")); tmp = Path(out_path).parent; dest = DestinationState(tmp / "demo_destination.sqlite"); proposal = runtime_proposal_model(bundle); resolver = _build_resolver(proposal, now=parse_time(EVAL)); result = run_exchange(make_message(bundle), bundle, LocalRegistry({"refund-sender"}, {"refund-recipient"}, "refund-recipient"), dest, evaluation_time=EVAL, manifest=manifest, store_path=tmp / "demo_exchange.sqlite", resolver=resolver); Path(out_path).write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8"); return result

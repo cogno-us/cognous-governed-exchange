@@ -37,6 +37,9 @@ Implemented delivery semantics:
 - message receipt is separate from understood/accepted/authorized/executed/observed/verified
 - identical redelivery is idempotent
 - message ID reuse with changed content rejects
+- message IDs outside a conservative file-name-safe grammar (ASCII letters, digits, `.`, `_`, `-`; no leading `.`, no `..`, at most 128 characters) are `NOT_UNDERSTOOD` at the structure stage
+- a message ID is reserved only after the message is accepted for assessment; refused or not-understood messages leave no receipt row
+- `resume_original_exchange` recomputes the supplied message's digest and rejects a claimed `message_digest` that does not match its content
 - new message ID replay cannot duplicate an existing effect ID
 - lost acknowledgement with applied destination state is reconciled, not re-executed
 - partial delivery remains unresolved
@@ -48,6 +51,11 @@ Implemented IMX continuity semantics:
 - stale or rolled-back predecessor histories fail closed
 - omitted information must be reported as loss
 - current authority must be resolved again before any new external effect
+
+Continuity limits (F5b):
+
+- The first successor packet for a conversation has no stored head to check against. `gax_ref_runtime.load_successor_packet` then trusts the caller-supplied predecessor: it checks only self-consistency (packet digest, source identity, source commitment), so any caller able to reach the store can initialise a conversation head. Only later packets are checked against the stored head. Loading still creates no effect and grants no authority.
+- `gax_ref.load_successor_packet` and `gax_ref.TransactionalExchangeStore` are historical and unsupported. They accept a higher-version packet with no predecessor link and do not apply the current runtime's checks. Use `gax_ref_runtime` instead.
 
 ## Unsupported and deferred
 

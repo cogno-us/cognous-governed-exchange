@@ -9,6 +9,12 @@ producer interface version 2.0.0 is shared. This verifies source identity, not
 independent authentication or authority. The S1 harness additionally rejects
 untracked import shadows in all seven component checkouts.
 
+F5b correction: module files are now located and Git-checked before they are
+imported, and each imported module must resolve to the verified file. Earlier
+revisions imported each module first, so planted import-time code could run
+before the check. The in-process Git check remains a provenance-consistency
+check, not a trust boundary; the harness fresh-checkout pre-check is the gate.
+
 Actual merged predecessors are runtime #86 at
 `309e194c1b0a3de23e11e20133e6eaf88875e48a`, Replay #25 at
 `83fbaf2a0f6f071aca1ea0af859eb8fc6385c26a`, ODES #33 at

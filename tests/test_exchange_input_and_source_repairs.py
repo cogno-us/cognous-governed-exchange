@@ -6,6 +6,9 @@ needs the assessment stages before Control Plane evaluation.
 """
 from __future__ import annotations
 
+import importlib.machinery
+import importlib.util
+import py_compile
 import subprocess
 import sys
 from pathlib import Path
@@ -231,3 +234,40 @@ def test_untracked_planted_package_is_refused_before_it_executes(fake_checkouts,
         runtime.load_executor_runtime()
     assert not marker.exists()
     assert "odes" not in sys.modules
+
+
+def test_untracked_package_directory_shadowing_tracked_module_is_refused_before_it_executes(fake_checkouts):
+    roots, marker = fake_checkouts
+    # The import system prefers a package directory over a same-named .py file.
+    shadow = roots["replay"] / "src/agent_replay_bundle/importers"
+    shadow.mkdir()
+    (shadow / "__init__.py").write_text(_planted(marker))
+    with pytest.raises(RuntimeError, match="candidate source identity mismatch: agent_replay_bundle.importers"):
+        runtime.load_executor_runtime()
+    assert not marker.exists()
+    assert "agent_replay_bundle" not in sys.modules
+
+
+def test_stray_extension_module_beside_tracked_module_is_refused(fake_checkouts):
+    roots, marker = fake_checkouts
+    # Extension modules are found before source files of the same name.
+    stray = roots["odes"] / ("src/odes/exporter" + importlib.machinery.EXTENSION_SUFFIXES[0])
+    stray.write_bytes(b"not a real extension")
+    with pytest.raises(RuntimeError, match="candidate source identity mismatch: odes.exporter"):
+        runtime.load_executor_runtime()
+    assert not marker.exists()
+    assert "odes" not in sys.modules
+
+
+def test_planted_unchecked_bytecode_for_tracked_module_is_refused(fake_checkouts, tmp_path):
+    roots, marker = fake_checkouts
+    # Unchecked-hash bytecode in __pycache__ would run instead of the verified source.
+    tracked = roots["pack"] / "src/agent_governance_evidence_pack/importer.py"
+    planted = tmp_path / "planted_source.py"
+    planted.write_text(_planted(marker))
+    py_compile.compile(str(planted), cfile=importlib.util.cache_from_source(str(tracked)),
+                       invalidation_mode=py_compile.PycInvalidationMode.UNCHECKED_HASH, doraise=True)
+    with pytest.raises(RuntimeError, match="candidate source identity mismatch: agent_governance_evidence_pack.importer"):
+        runtime.load_executor_runtime()
+    assert not marker.exists()
+    assert "agent_governance_evidence_pack" not in sys.modules

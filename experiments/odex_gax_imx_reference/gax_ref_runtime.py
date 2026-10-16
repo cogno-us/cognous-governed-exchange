@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import importlib
+import importlib.machinery
 import importlib.util
 import json
 import os
@@ -96,33 +97,71 @@ def _git_source_identity(directory: Path, tracked: list[Path]) -> tuple[str, str
     return actual, changed
 
 
-def _locate_without_import(name: str, expected_package_dir: Path | None) -> tuple[Path, list[Path]]:
-    """Resolve the file a later import of ``name`` will execute, without executing it.
+def _untracked_in_package_tree(package_dir: Path) -> str:
+    """List untracked files, ignored ones included, anywhere under a package.
 
-    Only the top-level spec is located (``find_spec`` on an undotted name runs no
-    module code); submodule paths are computed explicitly from that package
-    directory. Returns the module file and every file executed by the import.
+    Any such file could be imported in place of tracked source: a sibling
+    package or extension shadowing a module the package imports internally,
+    or cached bytecode in ``__pycache__`` executed instead of the verified
+    ``.py``. Candidate verification requires this list to be empty.
     """
-    top, *rest = name.split(".")
-    spec = importlib.util.find_spec(top)
-    if spec is None or spec.origin is None or not spec.submodule_search_locations:
+    return subprocess.check_output(
+        ["git", "-C", str(package_dir), "ls-files", "--others", "--", "."],
+        text=True, timeout=10,
+    ).strip()
+
+
+def _source_origin(spec: Any, name: str, *, package: bool) -> Path:
+    """Return the plain-source file a spec will execute, or refuse.
+
+    Extension modules, sourceless bytecode, namespace packages and a package
+    directory shadowing a same-named module all yield a different loader or
+    origin and are refused here, before anything is executed.
+    """
+    if (spec is None or spec.origin is None or not spec.has_location
+            or type(spec.loader) is not importlib.machinery.SourceFileLoader):
         raise RuntimeError(f"candidate source identity mismatch: {name}")
-    package_dir = Path(spec.origin).resolve().parent
-    if Path(spec.origin).name != "__init__.py":
+    origin = Path(spec.origin).resolve()
+    is_package = spec.submodule_search_locations is not None
+    if is_package != package or (package and origin.name != "__init__.py") or (not package and origin.suffix != ".py"):
         raise RuntimeError(f"candidate source identity mismatch: {name}")
-    if expected_package_dir is not None and package_dir != expected_package_dir.resolve():
+    if not origin.is_file():
         raise RuntimeError(f"candidate source identity mismatch: {name}")
-    executed = [package_dir / "__init__.py"]
-    current = package_dir
-    for part in rest[:-1]:
-        current = current / part
-        executed.append(current / "__init__.py")
-    module_file = (current / (rest[-1] + ".py")) if rest else package_dir / "__init__.py"
-    if rest:
-        executed.append(module_file)
-    if not all(path.is_file() for path in executed):
-        raise RuntimeError(f"candidate source identity mismatch: {name}")
-    return module_file.resolve(), [path.resolve() for path in executed]
+    return origin
+
+
+def _locate_without_import(name: str, expected_package_dir: Path | None) -> tuple[Path, list[Path]]:
+    """Resolve every file a later import of ``name`` will execute, without executing any.
+
+    Each level is resolved with the import system's own finders: the top-level
+    package with ``importlib.util.find_spec`` on its undotted name (honouring
+    ``sys.meta_path``), and each lower level with
+    ``importlib.machinery.PathFinder.find_spec(part, [parent_dir])``. Neither
+    runs module code, and both return the origin the import system will pick,
+    so a package directory or extension module shadowing the expected ``.py``
+    file is detected before import. Returns the module file and the ordered
+    chain of executed files (package ``__init__.py`` files, then the module).
+    """
+    importlib.invalidate_caches()
+    parts = name.split(".")
+    executed: list[Path] = []
+    spec = importlib.util.find_spec(parts[0])
+    for index, part in enumerate(parts):
+        if index:
+            spec = importlib.machinery.PathFinder.find_spec(part, [str(executed[-1].parent)])
+        is_package = index < len(parts) - 1
+        origin = _source_origin(spec, name, package=is_package)
+        if is_package and [Path(p).resolve() for p in spec.submodule_search_locations] != [origin.parent]:
+            raise RuntimeError(f"candidate source identity mismatch: {name}")
+        if index == 0 and expected_package_dir is not None and origin.parent != expected_package_dir.resolve():
+            raise RuntimeError(f"candidate source identity mismatch: {name}")
+        if index and origin.parent != executed[-1].parent:
+            raise RuntimeError(f"candidate source identity mismatch: {name}")
+        loaded = sys.modules.get(".".join(parts[: index + 1]))
+        if loaded is not None and Path(getattr(loaded, "__file__", "") or "").resolve() != origin:
+            raise RuntimeError(f"candidate source identity mismatch: {name}")
+        executed.append(origin)
+    return executed[-1], executed
 
 
 def _verify_refusal_profile_sources(cp_root: Path | None = None, molt_root: Path | None = None) -> None:
@@ -147,11 +186,12 @@ def _verify_refusal_profile_sources(cp_root: Path | None = None, molt_root: Path
         directory = module_file.parent
         try:
             actual, changed = _git_source_identity(directory, executed)
+            untracked = _untracked_in_package_tree(executed[0].parent)
         except (subprocess.CalledProcessError, OSError) as exc:
             raise RuntimeError(f"candidate source identity mismatch: {name}") from exc
-        if actual != revision or changed:
+        if actual != revision or changed or untracked:
             raise RuntimeError(f"candidate source identity mismatch: {name}")
-        verified[name] = module_file
+        verified[name] = (module_file, executed)
     manifest = Path(os.environ["UPSTREAM_MANIFEST_EXAMPLE"]).resolve()
     actual = subprocess.check_output(["git", "-C", str(manifest.parent), "rev-parse", "HEAD"],
                                      text=True, timeout=10).strip()
@@ -161,7 +201,12 @@ def _verify_refusal_profile_sources(cp_root: Path | None = None, molt_root: Path
                    check=True, capture_output=True, timeout=10)
     if actual != MANIFEST_REVISION or changed:
         raise RuntimeError("candidate source identity mismatch: manifest")
-    for name, module_file in verified.items():
+    # Nothing from any candidate package is imported until every origin in
+    # every chain has been verified. Re-resolve immediately before import so a
+    # change after verification is refused rather than executed.
+    for name, (module_file, executed) in verified.items():
+        if _locate_without_import(name, None) != (module_file, executed):
+            raise RuntimeError(f"candidate source identity mismatch: {name}")
         module = importlib.import_module(name)
         if Path(module.__file__).resolve() != module_file:
             raise RuntimeError(f"candidate source identity mismatch: {name}")

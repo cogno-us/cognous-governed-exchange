@@ -6,6 +6,8 @@ The engineering recommendations' Replay, Evidence Pack, ODES and consolidation s
 
 Set `GAX_RUNTIME_COMPATIBILITY_PROFILE=merged-producers-v1` before importing the runtime, and install/check out the following revisions. Unknown profile names fail at import. This selector is a compatibility contract, not an authorization input or an identity attestation. Do not switch it inside a running process.
 
+Limitation (F5b): `persistence-v1` and `merged-producers-v1` do not measure loaded source. Exported `repository_revision` and `control_plane_revision` fields, and the Replay/ODES provenance derived from them, are the configured revision constants for the selected profile, not a measurement of the code that ran. Content commitments preserve these labels; they do not authenticate them. Only the explicit candidate profiles run the in-process source-identity check, and that check is itself only a provenance-consistency check.
+
 | Dependency | Revision |
 | --- | --- |
 | cognous-action-manifest | `46c950bed37fe3812000895430bc0312d29e37ce` |

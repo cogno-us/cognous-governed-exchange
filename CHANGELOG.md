@@ -27,3 +27,13 @@
 - Advanced current Evidence Pack selection to `de6b9e071df49fc3e0c1254d39b5c94cced554f0`.
 - Preserved earlier ODES/Evidence Pack revisions as historical qualification combinations.
 - Added focused public-path qualification before the complete CI suite.
+
+## F5b security repairs (candidate, 2026-10-16)
+
+- Candidate source verification locates and Git-checks each module before importing it, then requires the import to resolve to the verified file. Documented as a provenance-consistency check, not a trust boundary.
+- Unsafe governed `message_id` values are `NOT_UNDERSTOOD` at the structure stage.
+- `run_exchange` records a message receipt only after the message is accepted for assessment.
+- `resume_original_exchange` rejects a supplied message whose `message_digest` does not match its content.
+- Pinned generation-fence workflow actions to full SHAs and disabled persisted checkout credentials.
+- Documented unmeasured historical revision labels, the historical legacy continuity loader, first-head predecessor trust and transport-adapter incompatibility with the V1 security profile.
+- No component revision constants changed. Requires requalification; no release or production authorization.

@@ -4,6 +4,8 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import importlib
+import importlib.machinery
+import importlib.util
 import json
 import os
 import sqlite3
@@ -40,6 +42,9 @@ GAX_ARTIFACT_EXPORT_VERSION = "1.1.0"
 
 
 # Explicit opt-in compatibility selection; historical default remains intact.
+# persistence-v1 and merged-producers-v1 stamp these configured constants into
+# exported provenance without measuring the loaded source; they are labels,
+# not source identity.
 RUNTIME_COMPATIBILITY_PROFILE = os.environ.get("GAX_RUNTIME_COMPATIBILITY_PROFILE", "persistence-v1")
 if RUNTIME_COMPATIBILITY_PROFILE == "merged-producers-v1":
     CP_REVISION = "d3dadee70bd319812b207389ab1e0f6efe511916"
@@ -79,29 +84,183 @@ def _workflow_options(runtime_authority_profile, allow_test_time=False):
     return {}
 
 
-def _verify_refusal_profile_sources() -> None:
-    """Refuse false candidate provenance; this is source identity, not trust."""
+def _git_source_identity(directory: Path, tracked: list[Path]) -> tuple[str, str]:
+    actual = subprocess.check_output(
+        ["git", "-C", str(directory), "rev-parse", "HEAD"], text=True, timeout=10
+    ).strip()
+    changed = subprocess.check_output(
+        ["git", "-C", str(directory), "status", "--porcelain", "--untracked-files=no"],
+        text=True, timeout=10,
+    ).strip()
+    subprocess.run(["git", "-C", str(directory), "ls-files", "--error-unmatch", "--", *map(str, tracked)],
+                   check=True, capture_output=True, timeout=10)
+    return actual, changed
+
+
+def _untracked_in_package_tree(package_dir: Path) -> str:
+    """List untracked files, ignored ones included, anywhere under a package.
+
+    Any such file could be imported in place of tracked source: a sibling
+    package or extension shadowing a module the package imports internally,
+    or cached bytecode in ``__pycache__`` executed instead of the verified
+    ``.py``. Candidate verification requires this list to be empty.
+    """
+    return subprocess.check_output(
+        ["git", "-C", str(package_dir), "ls-files", "--others", "--", "."],
+        text=True, timeout=10,
+    ).strip()
+
+
+def _refuse_untracked(name: str, paths: list[Path]) -> None:
+    first = paths[0]
+    hint = (" (normal bytecode caches also count; candidate profiles require PYTHONDONTWRITEBYTECODE=1"
+            " and a checkout without __pycache__)") if "__pycache__" in first.parts else ""
+    raise RuntimeError(f"candidate source identity mismatch: {name}: untracked or ignored importable file {first}{hint}")
+
+
+def _importable_top_level_name(entry: Path) -> str | None:
+    """The module name a sys.path-root entry would provide, if any."""
+    if entry.is_dir():
+        return entry.name if entry.name.isidentifier() else None
+    for suffix in (*importlib.machinery.all_suffixes(), ".pyw"):
+        if entry.name.endswith(suffix):
+            stem = entry.name[: -len(suffix)]
+            return stem if stem.isidentifier() else None
+    return None
+
+
+def _untracked_importable_at_roots(roots: set[Path]) -> list[Path]:
+    """Untracked or ignored importable top-level entries at candidate sys.path roots.
+
+    A root is a candidate checkout directory placed on ``sys.path``. Any
+    untracked ``*.py``/``*.pyc``/extension module, package or namespace
+    directory there shadows a module the tracked code imports (for example a
+    planted ``src/pydantic.py``). Only importable names at the root are
+    considered, so ignored ``*.egg-info`` or ``.venv`` directories are not.
+    """
+    found = []
+    for root in sorted(roots):
+        listed = subprocess.check_output(["git", "-C", str(root), "ls-files", "-z", "--", "."],
+                                         text=True, timeout=30)
+        tracked = {Path(item) for item in listed.split("\0") if item}
+        tracked_tops = {item.parts[0] for item in tracked}
+        for entry in sorted(root.iterdir()):
+            if _importable_top_level_name(entry) is None:
+                continue
+            if entry.name not in tracked_tops:
+                # A directory is importable as a regular package (__init__.py)
+                # or as a namespace portion holding importable modules.
+                if not entry.is_dir() or entry.name == "__pycache__" or any(
+                        child.is_file() and _importable_top_level_name(child) for child in entry.iterdir()):
+                    found.append(entry)
+            elif entry.is_dir() and (entry / "__init__.py").exists() and Path(entry.name, "__init__.py") not in tracked:
+                found.append(entry / "__init__.py")
+    return found
+
+
+def _source_origin(spec: Any, name: str, *, package: bool) -> Path:
+    """Return the plain-source file a spec will execute, or refuse.
+
+    Extension modules, sourceless bytecode, namespace packages and a package
+    directory shadowing a same-named module all yield a different loader or
+    origin and are refused here, before anything is executed.
+    """
+    if (spec is None or spec.origin is None or not spec.has_location
+            or type(spec.loader) is not importlib.machinery.SourceFileLoader):
+        raise RuntimeError(f"candidate source identity mismatch: {name}")
+    origin = Path(spec.origin).resolve()
+    is_package = spec.submodule_search_locations is not None
+    if is_package != package or (package and origin.name != "__init__.py") or (not package and origin.suffix != ".py"):
+        raise RuntimeError(f"candidate source identity mismatch: {name}")
+    if not origin.is_file():
+        raise RuntimeError(f"candidate source identity mismatch: {name}")
+    return origin
+
+
+def _locate_without_import(name: str, expected_package_dir: Path | None) -> tuple[Path, list[Path]]:
+    """Resolve every file a later import of ``name`` will execute, without executing any.
+
+    Each level is resolved with the import system's own finders: the top-level
+    package with ``importlib.util.find_spec`` on its undotted name (honouring
+    ``sys.meta_path``), and each lower level with
+    ``importlib.machinery.PathFinder.find_spec(part, [parent_dir])``. Neither
+    runs module code, and both return the origin the import system will pick,
+    so a package directory or extension module shadowing the expected ``.py``
+    file is detected before import. Returns the module file and the ordered
+    chain of executed files (package ``__init__.py`` files, then the module).
+    """
+    importlib.invalidate_caches()
+    parts = name.split(".")
+    executed: list[Path] = []
+    spec = importlib.util.find_spec(parts[0])
+    for index, part in enumerate(parts):
+        if index:
+            spec = importlib.machinery.PathFinder.find_spec(part, [str(executed[-1].parent)])
+        is_package = index < len(parts) - 1
+        origin = _source_origin(spec, name, package=is_package)
+        if is_package and [Path(p).resolve() for p in spec.submodule_search_locations] != [origin.parent]:
+            raise RuntimeError(f"candidate source identity mismatch: {name}")
+        if index == 0 and expected_package_dir is not None and origin.parent != expected_package_dir.resolve():
+            raise RuntimeError(f"candidate source identity mismatch: {name}")
+        if index and origin.parent != executed[-1].parent:
+            raise RuntimeError(f"candidate source identity mismatch: {name}")
+        loaded = sys.modules.get(".".join(parts[: index + 1]))
+        if loaded is not None and Path(getattr(loaded, "__file__", "") or "").resolve() != origin:
+            raise RuntimeError(f"candidate source identity mismatch: {name}")
+        executed.append(origin)
+    return executed[-1], executed
+
+
+def _verify_refusal_profile_sources(cp_root: Path | None = None, molt_root: Path | None = None) -> None:
+    """Refuse false candidate provenance; this is source identity, not trust.
+
+    Each module's file path is resolved and its Git identity checked *before*
+    the module is imported; the imported module must then come from that exact
+    verified file. This in-process check is a provenance-consistency check,
+    not a trust boundary: the fresh-checkout pre-check in the qualification
+    harness is the gate against modified or shadowed dependency checkouts.
+    """
     expected = {
-        "agent_control_plane.bounded": CP_REVISION,
-        "engine.producer_contract": MOLTBOT_REVISION,
-        "agent_replay_bundle.importers": REPLAY_REVISION,
-        "odes.exporter": ODES_REVISION,
-        "agent_governance_evidence_pack.importer": EVIDENCE_PACK_REVISION,
+        "agent_control_plane.bounded": (CP_REVISION, cp_root / "src" / "agent_control_plane" if cp_root else None),
+        "engine.producer_contract": (MOLTBOT_REVISION, molt_root / "engine" if molt_root else None),
+        "agent_replay_bundle.importers": (REPLAY_REVISION, None),
+        "odes.exporter": (ODES_REVISION, None),
+        "agent_governance_evidence_pack.importer": (EVIDENCE_PACK_REVISION, None),
     }
-    for name, revision in expected.items():
-        module = importlib.import_module(name)
-        directory = Path(module.__file__).resolve().parent
-        actual = subprocess.check_output(
-            ["git", "-C", str(directory), "rev-parse", "HEAD"], text=True, timeout=10
-        ).strip()
-        changed = subprocess.check_output(
-            ["git", "-C", str(directory), "status", "--porcelain", "--untracked-files=no"],
-            text=True, timeout=10,
-        ).strip()
-        subprocess.run(["git", "-C", str(directory), "ls-files", "--error-unmatch", Path(module.__file__).name],
-                       check=True, capture_output=True, timeout=10)
+    verified = {}
+    checkouts = {}
+    for name, (revision, package_dir) in expected.items():
+        module_file, executed = _locate_without_import(name, package_dir)
+        directory = module_file.parent
+        try:
+            actual, changed = _git_source_identity(directory, executed)
+            untracked = _untracked_in_package_tree(executed[0].parent)
+            toplevel = Path(subprocess.check_output(
+                ["git", "-C", str(directory), "rev-parse", "--show-toplevel"], text=True, timeout=10
+            ).strip()).resolve()
+        except (subprocess.CalledProcessError, OSError) as exc:
+            raise RuntimeError(f"candidate source identity mismatch: {name}") from exc
         if actual != revision or changed:
             raise RuntimeError(f"candidate source identity mismatch: {name}")
+        if untracked:
+            _refuse_untracked(name, [executed[0].parent / untracked.splitlines()[0]])
+        verified[name] = (module_file, executed)
+        checkouts[name] = (toplevel, executed[0].parent.parent)
+    for name, (toplevel, package_root) in checkouts.items():
+        roots = {package_root}
+        for item in sys.path:
+            try:
+                path = Path(item or os.getcwd()).resolve()
+            except OSError:
+                continue
+            if path.is_dir() and path.is_relative_to(toplevel):
+                roots.add(path)
+        try:
+            shadows = _untracked_importable_at_roots(roots)
+        except (subprocess.CalledProcessError, OSError) as exc:
+            raise RuntimeError(f"candidate source identity mismatch: {name}") from exc
+        if shadows:
+            _refuse_untracked(name, shadows)
     manifest = Path(os.environ["UPSTREAM_MANIFEST_EXAMPLE"]).resolve()
     actual = subprocess.check_output(["git", "-C", str(manifest.parent), "rev-parse", "HEAD"],
                                      text=True, timeout=10).strip()
@@ -111,6 +270,15 @@ def _verify_refusal_profile_sources() -> None:
                    check=True, capture_output=True, timeout=10)
     if actual != MANIFEST_REVISION or changed:
         raise RuntimeError("candidate source identity mismatch: manifest")
+    # Nothing from any candidate package is imported until every origin in
+    # every chain has been verified. Re-resolve immediately before import so a
+    # change after verification is refused rather than executed.
+    for name, (module_file, executed) in verified.items():
+        if _locate_without_import(name, None) != (module_file, executed):
+            raise RuntimeError(f"candidate source identity mismatch: {name}")
+        module = importlib.import_module(name)
+        if Path(module.__file__).resolve() != module_file:
+            raise RuntimeError(f"candidate source identity mismatch: {name}")
 
 
 def load_executor_runtime() -> dict[str, Any]:
@@ -124,7 +292,7 @@ def load_executor_runtime() -> dict[str, Any]:
             sys.path.insert(0, path)
 
     if RUNTIME_COMPATIBILITY_PROFILE in {"typed-refusal-candidate-20261015", "security-runtime-candidate-20261016"}:
-        _verify_refusal_profile_sources()
+        _verify_refusal_profile_sources(cp_root, molt_root)
     producer = importlib.import_module("engine.producer_contract")
     cp = importlib.import_module("agent_control_plane.bounded")
     if producer.EXECUTOR_PRODUCER_PROFILE_ID != MOLTBOT_PRODUCER_PROFILE_ID:
@@ -714,15 +882,21 @@ def run_exchange(message: dict[str, Any], bundle: dict[str, Any], registry: Loca
     _workflow_options(runtime_authority_profile, allow_test_time)
     store_path = Path(store_path)
     store = TransactionalExchangeStore(store_path)
-    duplicate, err = store.record_message(message)
-    if err:
-        return {"assessment": {"permitted_handling": "REFUSE", "errors": [err], "stages": {"identity_binding": "failed"}}, "execution": {"attempted": False, "reason": err}, "successor_packet": None}
+    # Look up the retained receipt without inserting: a message that is not
+    # accepted must never reserve its message_id.
     seen_messages = store.seen_messages()
-    if seen_messages.get(message["message_id"]) == message["message_digest"]:
+    prior_digest = seen_messages.get(message.get("message_id"))
+    if prior_digest is not None and prior_digest != message.get("message_digest"):
+        err = "GAX-INTEGRITY-MESSAGE-ID-REUSE"
+        return {"assessment": {"permitted_handling": "REFUSE", "errors": [err], "stages": {"identity_binding": "failed"}}, "execution": {"attempted": False, "reason": err}, "successor_packet": None}
+    if prior_digest is not None:
         seen_messages = {key: value for key, value in seen_messages.items() if key != message["message_id"]}
     assessment = assess_message(message, bundle, registry, evaluation_time=evaluation_time, seen_messages=seen_messages)
     if assessment["permitted_handling"] != "ACCEPT_FOR_ASSESSMENT":
         return {"assessment": assessment, "execution": {"attempted": False, "reason": "message_not_execution_eligible"}, "successor_packet": None}
+    duplicate, err = store.record_message(message)
+    if err:
+        return {"assessment": {"permitted_handling": "REFUSE", "errors": [err], "stages": {"identity_binding": "failed"}}, "execution": {"attempted": False, "reason": err}, "successor_packet": None}
 
     association = store.workflow_for_message(message)
     if duplicate and association is not None:
@@ -775,6 +949,11 @@ def resume_original_exchange(message: dict[str, Any], *, manifest: dict[str, Any
     _workflow_options(runtime_authority_profile, allow_test_time)
     if observation_policy is None:
         raise ValueError("observation_policy is required")
+    # The supplied message becomes the recovery predecessor; its claimed digest
+    # must commit to its actual content before it selects a retained workflow.
+    claimed_digest = message.get("message_digest")
+    if not isinstance(claimed_digest, str) or claimed_digest != digest({k: v for k, v in message.items() if k != "message_digest"}):
+        raise ValueError("message_digest does not match the supplied original message")
     now = parse_time(evaluation_time)
     store_path = Path(store_path)
     store = TransactionalExchangeStore(store_path)
@@ -1051,6 +1230,13 @@ class TransactionalExchangeStore:
         return digest({k: v for k, v in packet.items() if k != "packet_digest"})
 
     def accept_successor(self, packet: dict[str, Any], predecessor: dict[str, Any]) -> dict[str, Any]:
+        """Load a successor packet for reconciliation only; never an effect or grant.
+
+        Limitation: with no stored head for the conversation, the first packet is
+        checked only for self-consistency against the caller-supplied
+        predecessor. That caller-supplied predecessor is trusted; any caller with
+        store access can initialise a conversation head.
+        """
         if packet.get("packet_digest") != self._material_digest(packet):
             return {"loaded": False, "effect_created": False, "status": "packet_digest_mismatch"}
         if packet.get("profile") != PROFILE or packet.get("schema_version") != PROTOCOL_VERSION:

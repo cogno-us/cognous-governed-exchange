@@ -170,7 +170,7 @@ def fake_checkouts(tmp_path, monkeypatch):
     marker = tmp_path / "planted-code-ran"
     roots, revisions = {}, {}
     for key, (package, module) in MODULES.items():
-        body = "PLANTED = False\n"
+        body = "import colorsys\nPLANTED = False\n"
         if key == "runtime":
             body += ("EXECUTOR_PRODUCER_PROFILE_ID = 'urn:cognous:profiles:moltbot-safe-executor-producer'\n"
                      "EXECUTOR_PRODUCER_PROFILE_VERSION = '2.0.0'\n"
@@ -271,3 +271,41 @@ def test_planted_unchecked_bytecode_for_tracked_module_is_refused(fake_checkouts
         runtime.load_executor_runtime()
     assert not marker.exists()
     assert "agent_governance_evidence_pack" not in sys.modules
+
+
+@pytest.mark.parametrize("key, root, entry", [
+    ("replay", "src", "colorsys.py"),
+    ("control_plane", "src", "colorsys.py"),
+    ("runtime", "", "colorsys.py"),
+    ("odes", "src", "colorsys/__init__.py"),
+    ("pack", "src", "colorsys/helper.py"),
+])
+def test_untracked_top_level_module_at_checkout_path_root_is_refused(fake_checkouts, key, root, entry):
+    roots, marker = fake_checkouts
+    # A checkout's sys.path root is searched before the stdlib, so an untracked
+    # top-level module there shadows a dependency the tracked code imports.
+    sys.modules.pop("colorsys", None)
+    target = roots[key] / root / entry
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(_planted(marker))
+    with pytest.raises(RuntimeError, match="untracked or ignored importable file"):
+        runtime.load_executor_runtime()
+    assert not marker.exists()
+
+
+def test_ignored_non_importable_entries_at_path_root_are_accepted(fake_checkouts):
+    roots, marker = fake_checkouts
+    for name in ("pkg.egg-info", ".venv", "build-output"):
+        (roots["replay"] / "src" / name).mkdir()
+        (roots["replay"] / "src" / name / "PKG-INFO").write_text("x")
+    runtime.load_executor_runtime()
+    assert not marker.exists()
+
+
+def test_bytecode_cache_refusal_names_the_offending_file(fake_checkouts):
+    roots, marker = fake_checkouts
+    cache = roots["odes"] / "src/odes/__pycache__"
+    cache.mkdir()
+    (cache / "exporter.cpython-312.pyc").write_bytes(b"")
+    with pytest.raises(RuntimeError, match=r"__pycache__.*PYTHONDONTWRITEBYTECODE=1"):
+        runtime.load_executor_runtime()

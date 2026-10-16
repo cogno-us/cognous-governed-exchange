@@ -111,6 +111,53 @@ def _untracked_in_package_tree(package_dir: Path) -> str:
     ).strip()
 
 
+def _refuse_untracked(name: str, paths: list[Path]) -> None:
+    first = paths[0]
+    hint = (" (normal bytecode caches also count; candidate profiles require PYTHONDONTWRITEBYTECODE=1"
+            " and a checkout without __pycache__)") if "__pycache__" in first.parts else ""
+    raise RuntimeError(f"candidate source identity mismatch: {name}: untracked or ignored importable file {first}{hint}")
+
+
+def _importable_top_level_name(entry: Path) -> str | None:
+    """The module name a sys.path-root entry would provide, if any."""
+    if entry.is_dir():
+        return entry.name if entry.name.isidentifier() else None
+    for suffix in (*importlib.machinery.all_suffixes(), ".pyw"):
+        if entry.name.endswith(suffix):
+            stem = entry.name[: -len(suffix)]
+            return stem if stem.isidentifier() else None
+    return None
+
+
+def _untracked_importable_at_roots(roots: set[Path]) -> list[Path]:
+    """Untracked or ignored importable top-level entries at candidate sys.path roots.
+
+    A root is a candidate checkout directory placed on ``sys.path``. Any
+    untracked ``*.py``/``*.pyc``/extension module, package or namespace
+    directory there shadows a module the tracked code imports (for example a
+    planted ``src/pydantic.py``). Only importable names at the root are
+    considered, so ignored ``*.egg-info`` or ``.venv`` directories are not.
+    """
+    found = []
+    for root in sorted(roots):
+        listed = subprocess.check_output(["git", "-C", str(root), "ls-files", "-z", "--", "."],
+                                         text=True, timeout=30)
+        tracked = {Path(item) for item in listed.split("\0") if item}
+        tracked_tops = {item.parts[0] for item in tracked}
+        for entry in sorted(root.iterdir()):
+            if _importable_top_level_name(entry) is None:
+                continue
+            if entry.name not in tracked_tops:
+                # A directory is importable as a regular package (__init__.py)
+                # or as a namespace portion holding importable modules.
+                if not entry.is_dir() or entry.name == "__pycache__" or any(
+                        child.is_file() and _importable_top_level_name(child) for child in entry.iterdir()):
+                    found.append(entry)
+            elif entry.is_dir() and (entry / "__init__.py").exists() and Path(entry.name, "__init__.py") not in tracked:
+                found.append(entry / "__init__.py")
+    return found
+
+
 def _source_origin(spec: Any, name: str, *, package: bool) -> Path:
     """Return the plain-source file a spec will execute, or refuse.
 
@@ -181,17 +228,39 @@ def _verify_refusal_profile_sources(cp_root: Path | None = None, molt_root: Path
         "agent_governance_evidence_pack.importer": (EVIDENCE_PACK_REVISION, None),
     }
     verified = {}
+    checkouts = {}
     for name, (revision, package_dir) in expected.items():
         module_file, executed = _locate_without_import(name, package_dir)
         directory = module_file.parent
         try:
             actual, changed = _git_source_identity(directory, executed)
             untracked = _untracked_in_package_tree(executed[0].parent)
+            toplevel = Path(subprocess.check_output(
+                ["git", "-C", str(directory), "rev-parse", "--show-toplevel"], text=True, timeout=10
+            ).strip()).resolve()
         except (subprocess.CalledProcessError, OSError) as exc:
             raise RuntimeError(f"candidate source identity mismatch: {name}") from exc
-        if actual != revision or changed or untracked:
+        if actual != revision or changed:
             raise RuntimeError(f"candidate source identity mismatch: {name}")
+        if untracked:
+            _refuse_untracked(name, [executed[0].parent / untracked.splitlines()[0]])
         verified[name] = (module_file, executed)
+        checkouts[name] = (toplevel, executed[0].parent.parent)
+    for name, (toplevel, package_root) in checkouts.items():
+        roots = {package_root}
+        for item in sys.path:
+            try:
+                path = Path(item or os.getcwd()).resolve()
+            except OSError:
+                continue
+            if path.is_dir() and path.is_relative_to(toplevel):
+                roots.add(path)
+        try:
+            shadows = _untracked_importable_at_roots(roots)
+        except (subprocess.CalledProcessError, OSError) as exc:
+            raise RuntimeError(f"candidate source identity mismatch: {name}") from exc
+        if shadows:
+            _refuse_untracked(name, shadows)
     manifest = Path(os.environ["UPSTREAM_MANIFEST_EXAMPLE"]).resolve()
     actual = subprocess.check_output(["git", "-C", str(manifest.parent), "rev-parse", "HEAD"],
                                      text=True, timeout=10).strip()

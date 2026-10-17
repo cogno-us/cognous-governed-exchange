@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## F5b peer repin to Replay def0ee0f, ODES 5675f1b9 and Evidence Pack 505a3590 (17 October 2026)
+
+- Repinned the hard-coded `security-runtime-f5b-20261016` peers again: Replay `def0ee0f`, ODES `5675f1b9` and Evidence Pack `505a3590`. Runtime `4a83b175`, Control Plane `a34c3dc2` and Manifest `2c36bcd0` are unchanged. Older generations and earlier changelog entries are left as they were. The source-identity check compares the pinned constants, so no code beyond the literals changed.
+
 ## F5b remediated peer repin (17 October 2026)
 
 - Repinned the hard-coded `security-runtime-f5b-20261016` peers to the remediated tuple: runtime `4a83b175`, Replay `0cfe7a63`, ODES `4e6d1169` and Evidence Pack `683246e0`. Control Plane `a34c3dc2` and Manifest `2c36bcd0` are unchanged.

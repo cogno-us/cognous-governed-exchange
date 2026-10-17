@@ -51,3 +51,12 @@ is an error. Omitting both preserves the accepted default runtime path.
 The fence does not create, refresh or reinterpret an institutional grant. The
 existing Control Plane decision and effect identity remain authoritative for
 permission; the generation fence is an additional local supersession guard.
+
+## F5b effective-grant arguments
+
+On the F5b path the executor passes `expected_effective_grant_digest` and
+`effective_grant_derivation_version` to the destination commit. The fence
+forwards both unchanged, inside the same write lock and only after the
+generation check passes. When they are not supplied the destination is called
+exactly as before. A refused claim never reaches the destination, so the
+effective-grant check is not evaluated for a superseded generation.

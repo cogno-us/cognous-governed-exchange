@@ -182,3 +182,60 @@ def test_mutation_control_disabled_refusal_writer_cannot_silently_return(tmp_pat
 
     assert destination.effects == []
     assert fence.refusals("conversation-1") == []
+
+
+class F5bDestination:
+    def __init__(self):
+        self.calls = []
+
+    def commit(self, snapshot, *, simulate=None, expected_effective_grant_digest=None,
+               effective_grant_derivation_version=None):
+        self.calls.append((snapshot.effect_id, simulate, expected_effective_grant_digest,
+                           effective_grant_derivation_version))
+        return {"status": "applied"}
+
+
+def test_f5b_effective_grant_arguments_are_forwarded_for_current_generation(tmp_path):
+    path = tmp_path / "exchange.sqlite"
+    _head(path, "conversation-1", 4)
+    fence = LineageGenerationFence(path)
+    destination = F5bDestination()
+    claim = GenerationFenceClaim("conversation-1", "effect-1", 4)
+
+    result = fence.wrap_destination(destination, claim).commit(
+        _snapshot(),
+        simulate=None,
+        expected_effective_grant_digest="sha256:grant",
+        effective_grant_derivation_version="v1",
+    )
+
+    assert result == {"status": "applied"}
+    assert destination.calls == [("effect-1", None, "sha256:grant", "v1")]
+    assert fence.refusals("conversation-1") == []
+
+
+def test_f5b_superseded_generation_is_refused_without_effect_and_persists_refusal(tmp_path):
+    path = tmp_path / "exchange.sqlite"
+    _head(path, "conversation-1", 4)
+    fence = LineageGenerationFence(path)
+    destination = F5bDestination()
+    claim = GenerationFenceClaim("conversation-1", "effect-1", 3)
+
+    with pytest.raises(GenerationFenceRefusal, match="superseded_lineage_generation"):
+        fence.wrap_destination(destination, claim).commit(
+            _snapshot(),
+            expected_effective_grant_digest="sha256:grant",
+            effective_grant_derivation_version="v1",
+        )
+
+    assert destination.calls == []
+    assert [r["reason"] for r in fence.refusals("conversation-1")] == ["superseded_lineage_generation"]
+
+
+def test_legacy_destination_receives_no_f5b_keywords_when_not_supplied(tmp_path):
+    path = tmp_path / "exchange.sqlite"
+    _head(path, "conversation-1", 4)
+    fence = LineageGenerationFence(path)
+    destination = Destination()  # accepts only simulate=
+    fence.wrap_destination(destination, GenerationFenceClaim("conversation-1", "effect-1", 4)).commit(_snapshot())
+    assert destination.effects == [("effect-1", None)]

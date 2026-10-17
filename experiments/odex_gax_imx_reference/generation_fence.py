@@ -234,7 +234,17 @@ class LineageGenerationFence:
         claim: GenerationFenceClaim,
         *,
         simulate: str | None = None,
+        expected_effective_grant_digest: str | None = None,
+        effective_grant_derivation_version: str | None = None,
     ) -> Any:
+        # F5b effective-grant arguments are forwarded to the destination only when
+        # supplied, so destinations without F5b support keep working unchanged.
+        destination_kwargs: dict[str, Any] = {}
+        if expected_effective_grant_digest is not None:
+            destination_kwargs["expected_effective_grant_digest"] = expected_effective_grant_digest
+            destination_kwargs["effective_grant_derivation_version"] = effective_grant_derivation_version
+        elif effective_grant_derivation_version is not None:
+            raise ValueError("effective_grant_derivation_version requires expected_effective_grant_digest")
         snapshot_effect_id = getattr(snapshot, "effect_id", None)
         with self._connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
@@ -270,7 +280,7 @@ class LineageGenerationFence:
                 )
 
             try:
-                result = destination.commit(snapshot, simulate=simulate)
+                result = destination.commit(snapshot, simulate=simulate, **destination_kwargs)
             except Exception:
                 conn.execute("ROLLBACK")
                 raise
@@ -309,12 +319,21 @@ class _FencedDestination:
         self._destination = destination
         self._claim = claim
 
-    def commit(self, snapshot: Any, *, simulate: str | None = None) -> Any:
+    def commit(
+        self,
+        snapshot: Any,
+        *,
+        simulate: str | None = None,
+        expected_effective_grant_digest: str | None = None,
+        effective_grant_derivation_version: str | None = None,
+    ) -> Any:
         return self._fence.commit_if_current(
             self._destination,
             snapshot,
             self._claim,
             simulate=simulate,
+            expected_effective_grant_digest=expected_effective_grant_digest,
+            effective_grant_derivation_version=effective_grant_derivation_version,
         )
 
     def __getattr__(self, name: str) -> Any:

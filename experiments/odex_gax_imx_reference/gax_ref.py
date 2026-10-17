@@ -251,6 +251,13 @@ def assess_message(message: dict[str, Any], bundle: dict[str, Any], registry: Lo
     stages["freshness"] = "passed"; proposal = runtime_proposal_model(bundle); p = proposal.model_dump(mode="json", exclude_none=False)
     expected_req = {"action_id": p["action_id"], "target": p["target"], "payload": p["payload"], "amount": p["amount"], "unit": p["unit"], "actor": p["actor"], "principal": p["principal"], "adapter_id": p["adapter_id"], "requested_permissions": p["requested_permissions"]}
     if message["requested_action"] != expected_req or message["proposal_commitment"] != proposal_commitment(model=proposal) or message["operation_commitment"] != operation_commitment(model=proposal): return fail("reference_resolution", "GAX-REFERENCE-OPERATION-BINDING-MISMATCH")
+    bundle_refs = [r for r in message["evidence_refs"] if isinstance(r, dict) and r.get("type") == "replay_bundle"]
+    if bundle_refs:
+        bundle_digest = digest(bundle)
+        if any(r.get("digest") != bundle_digest for r in bundle_refs): return fail("evidence_digest", "GAX-EVIDENCE-DIGEST-MISMATCH")
+        stages["evidence_digest"] = "verified"
+    else:
+        stages["evidence_digest"] = "not_verified_no_replay_bundle_digest_in_evidence_refs"
     if not any(r.get("ref") == p.get("authority_context_ref") for r in message["authority_refs"]): return fail("authority_reference", "GAX-AUTHORITY-REFERENCE-MISMATCH")
     stages["reference_resolution"] = "passed"; stages["authority_reference"] = "present_not_authorizing"
     if message["message_type"] in INFORMATIONAL_TYPES:

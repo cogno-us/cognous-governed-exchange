@@ -6,6 +6,11 @@
 - Fence semantics are unchanged: a superseded generation is refused with a persisted refusal and no effect; the current generation commits. The arguments are forwarded only when supplied, so destinations without F5b support are unaffected.
 - Added regression tests in `tests/test_generation_fence.py`.
 
+## Unreleased
+
+- Fixed (issue #30): `assess_message` now compares each `evidence_refs` entry of type `replay_bundle` to the digest of the supplied bundle. A mismatch is refused with `GAX-EVIDENCE-DIGEST-MISMATCH` (stage `evidence_digest: failed`) and nothing is dispatched. Behaviour change: previously a substituted bundle that derived the same proposal was accepted and executed.
+- A message carrying no `replay_bundle` digest in `evidence_refs` is still accepted, but the assessment now discloses `stages.evidence_digest = not_verified_no_replay_bundle_digest_in_evidence_refs`.
+
 ## 0.1.0 — Worker 13 review candidate
 
 - Added separately versioned governed-message transport envelope.

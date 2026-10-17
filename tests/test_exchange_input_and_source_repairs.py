@@ -375,3 +375,39 @@ def test_historical_profiles_reject_runtime_authority_options(monkeypatch):
 def test_unknown_profile_still_refused(monkeypatch):
     with pytest.raises(RuntimeError, match="unsupported GAX runtime compatibility profile"):
         _load_with_profile(monkeypatch, "security-runtime-f5b-20261017")
+
+
+# evidence_refs replay-bundle digest binding (issue #30) ---------------------------------------
+
+def _bound(message, bundle):
+    msg = dict(message)
+    msg["evidence_refs"] = [{"type": "replay_bundle", "ref": bundle["bundle_id"], "digest": base.digest(bundle)}]
+    msg["message_digest"] = base.digest({k: v for k, v in msg.items() if k != "message_digest"})
+    return msg
+
+
+@pytest.mark.parametrize("variant", ["extra_field", "identifier_changed"])
+def test_substituted_replay_bundle_is_rejected_by_evidence_digest(stub_proposal, variant):
+    bundle = {"bundle_id": "b-1", "run_id": "r-1"}
+    msg = _bound(governed("m-sub-" + variant), bundle)
+    substituted = dict(bundle)
+    if variant == "extra_field":
+        substituted["substituted_marker"] = "x"
+    else:
+        substituted["bundle_id"] = "b-1-substituted"
+    out = base.assess_message(msg, substituted, registry(), evaluation_time=EVAL)
+    assert out["permitted_handling"] == "REFUSE"
+    assert "GAX-EVIDENCE-DIGEST-MISMATCH" in out["errors"]
+    assert out["stages"]["evidence_digest"] == "failed"
+
+
+def test_matching_replay_bundle_digest_is_verified(stub_proposal):
+    bundle = {"bundle_id": "b-1", "run_id": "r-1"}
+    out = base.assess_message(_bound(governed("m-ok"), bundle), bundle, registry(), evaluation_time=EVAL)
+    assert out["permitted_handling"] == "ACCEPT_FOR_ASSESSMENT"
+    assert out["stages"]["evidence_digest"] == "verified"
+
+
+def test_absent_replay_bundle_digest_is_disclosed_as_not_verified(stub_proposal):
+    out = base.assess_message(governed("m-none"), {}, registry(), evaluation_time=EVAL)
+    assert out["stages"]["evidence_digest"].startswith("not_verified")

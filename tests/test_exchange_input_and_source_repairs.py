@@ -334,6 +334,14 @@ F5B_PINS = {
     "ODES_REVISION": "5675f1b96d95ba69510656bf73b1006110ef5b57",
     "EVIDENCE_PACK_REVISION": "505a3590114705b7ebf736b92dd189f338134635",
 }
+P4_PINS = {
+    "CP_REVISION": "26a7e6594eb535827ccc248cbca36a7d119d613b",
+    "MOLTBOT_REVISION": "3024ef6e6ecf7da22e5f4fdf90d873f93b2a55c9",
+    "MANIFEST_REVISION": "2c36bcd0b620dbfe7ad924bc7196a3f0c04c5c5e",
+    "REPLAY_REVISION": "9aab3f6c34d2721ef1be3f6468b71dc3bad99a2a",
+    "ODES_REVISION": "c5f4e2d0015ccdc94127a4025a6b605fc7fbdcbd",
+    "EVIDENCE_PACK_REVISION": "54df6984dd418e2e0a09f89e54f281493475831c",
+}
 RETAINED_SECURITY_PINS = {
     "CP_REVISION": "996baeb476c8745b1a58ddc968b9eecc6a39b76b",
     "MOLTBOT_REVISION": "fd6b76fa0e85feb5b67324114bf790d3a12fdaf1",
@@ -346,15 +354,20 @@ RETAINED_SECURITY_PINS = {
 
 @pytest.mark.parametrize("profile, pins", [
     ("security-runtime-f5b-20261016", F5B_PINS),
+    ("security-runtime-p4-20261017", P4_PINS),
     ("security-runtime-candidate-20261016", RETAINED_SECURITY_PINS),
 ])
 def test_security_runtime_generations_select_exact_separate_pins(monkeypatch, profile, pins):
     module = _load_with_profile(monkeypatch, profile)
     assert {name: getattr(module, name) for name in PINS} == pins
     assert not set(F5B_PINS.values()) & set(RETAINED_SECURITY_PINS.values())
+    # P4 keeps the F5b Manifest and nothing else from F5b or the retained generation.
+    assert {k: v for k, v in P4_PINS.items() if v in set(F5B_PINS.values()) | set(RETAINED_SECURITY_PINS.values())} == {
+        "MANIFEST_REVISION": P4_PINS["MANIFEST_REVISION"]}
 
 
-@pytest.mark.parametrize("profile", ["security-runtime-f5b-20261016", "security-runtime-candidate-20261016"])
+@pytest.mark.parametrize("profile", ["security-runtime-f5b-20261016", "security-runtime-p4-20261017",
+                                     "security-runtime-candidate-20261016"])
 def test_security_runtime_generations_require_trusted_configuration(monkeypatch, profile):
     module = _load_with_profile(monkeypatch, profile)
     assert profile in module.SECURITY_RUNTIME_PROFILES and profile in module.STRICT_SOURCE_PROFILES
@@ -374,7 +387,7 @@ def test_historical_profiles_reject_runtime_authority_options(monkeypatch):
 
 def test_unknown_profile_still_refused(monkeypatch):
     with pytest.raises(RuntimeError, match="unsupported GAX runtime compatibility profile"):
-        _load_with_profile(monkeypatch, "security-runtime-f5b-20261017")
+        _load_with_profile(monkeypatch, "security-runtime-p4-20261018")
 
 
 # evidence_refs replay-bundle digest binding (issue #30) ---------------------------------------

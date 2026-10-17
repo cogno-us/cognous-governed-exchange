@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## P4 compatibility profile security-runtime-p4-20261017 (17 October 2026)
+
+- Added the runtime compatibility profile `security-runtime-p4-20261017` beside `security-runtime-f5b-20261016` (kept, so retained evidence stays reproducible): Control Plane `26a7e659`, runtime `3024ef6e`, Manifest `2c36bcd0`, Replay `9aab3f6c` (step B), ODES `c5f4e2d0` and Evidence Pack `54df6984`. Strict source verification compares the checkouts to these constants as for the other profiles. Alpha scaffolding (qualification P4 of cogno-us/cognous-control-plane#38), removed with the other hard pins at end-of-alpha (P5).
+
 ## F5b peer repin to Replay def0ee0f, ODES 5675f1b9 and Evidence Pack 505a3590 (17 October 2026)
 
 - Repinned the hard-coded `security-runtime-f5b-20261016` peers again: Replay `def0ee0f`, ODES `5675f1b9` and Evidence Pack `505a3590`. Runtime `4a83b175`, Control Plane `a34c3dc2` and Manifest `2c36bcd0` are unchanged. Older generations and earlier changelog entries are left as they were. The source-identity check compares the pinned constants, so no code beyond the literals changed.

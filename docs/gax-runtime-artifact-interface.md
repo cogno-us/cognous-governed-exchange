@@ -2,7 +2,7 @@
 
 ## Supported runtime boundary
 
-The supported GAX runtime imports the public Moltbot Safe runtime modules:
+The supported GAX runtime imports the public Execution Runtime modules:
 
 - executor adapter: `engine.control_plane_adapter.PinnedControlPlaneExecutor`
 - producer export: `engine.producer_contract`

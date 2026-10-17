@@ -1,6 +1,5 @@
 <!-- cognous-banner:start -->
 
-Cross-component test commands below now run in a disposable checkout assembled by the [qualification workflows](CROSS_COMPONENT_TESTS.md). Plain local test discovery covers the component-local tests retained here. Historical reports and dependency pins keep their original scope.
 ```text
 ──────────────────────────────────────────────────
    __________  _______   ______  __  _______
@@ -19,7 +18,7 @@ Cross-component test commands below now run in a disposable checkout assembled b
 
 **Governed exchange and continuity for a bounded synthetic workflow.**
 
-**Stack role: Cross-cutting exchange integration (GAX/IMX).** Connects the six responsibility groups through governed exchange and continuity.
+**Stack role: Cross-cutting exchange integration (GAX/IMX).** Connects the five responsibility groups through governed exchange and continuity.
 
 ## Overview
 
@@ -107,7 +106,7 @@ See the [research bibliography](https://github.com/cogno-us/cognous-open-control
 
 ## Cognous stack components
 
-The six groups organize component responsibilities. They are not an execution
+The five groups organize component responsibilities. They are not an execution
 sequence or a requirement to install every component. The [hub lock](https://github.com/cogno-us/cognous-open-control-stack/blob/main/component-lock.json)
 defines the selected integration; [release status](https://github.com/cogno-us/cognous-open-control-stack/blob/main/docs/release-status.md)
 defines its evidence and limits.
@@ -117,18 +116,16 @@ defines its evidence and limits.
 | **01 · Knowledge & Provenance** | [The Index (Evidence Registry)](https://github.com/cogno-us/cognous-evidence-registry) · [BitRep (Evidence Attestation)](https://github.com/cogno-us/cognous-evidence-attestation) |
 | **02 · Institutional Governance** | [Alvorada (Institutional Governance)](https://github.com/cogno-us/cognous-institutional-governance) · authority contracts |
 | **03 · Declaration & Policy Control** | [Action Manifest](https://github.com/cogno-us/cognous-action-manifest) · [Control Plane](https://github.com/cogno-us/cognous-control-plane) |
-| **04 · Constrained Execution** | [Execution Runtime (Moltbot Safe)](https://github.com/cogno-us/cognous-execution-runtime) |
+| **04 · Constrained Execution** | [Execution Runtime](https://github.com/cogno-us/cognous-execution-runtime) |
 | **05 · Replay & Evidence** | [Replay Bundle](https://github.com/cogno-us/cognous-replay-bundle) · [Governance Evidence Pack](https://github.com/cogno-us/cognous-governance-evidence-pack) · [ODES](https://github.com/cogno-us/open-decision-evidence-standard) |
-| **06 · Reasoning & Human Oversight** | [PRP](https://github.com/cogno-us/portable-reasoning-protocol) · [Research Intelligence](https://github.com/cogno-us/research-intelligence-protocol) · [TFA](https://github.com/cogno-us/truth-freedom-agency-protocol) |
 
 **Cross-cutting exchange:** [Governed Exchange (GAX/IMX)](https://github.com/cogno-us/cognous-governed-exchange) connects
 governed messages, recipient assessment and continuity across the groups. It is
 separate from Alvorada's institutional authority framework.
 
-Execution Runtime and Moltbot Safe name the same repository here. The supported
-Cognous Python execution boundary remains distinct from the retained upstream
-application. PRP, Research Intelligence and TFA are optional behavioral
-instructions; they do not enforce authorization or substitute for human oversight.
+The supported Execution Runtime boundary is the Cognous Python layer under
+`engine/`. The upstream application is outside this boundary. Human oversight
+requires an actual review process and accountable people.
 A signature, registry entry, message receipt or evidence summary does not grant
 execution authority.
 

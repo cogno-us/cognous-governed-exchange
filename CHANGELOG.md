@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## F5b remediated peer repin (17 October 2026)
+
+- Repinned the hard-coded `security-runtime-f5b-20261016` peers to the remediated tuple: runtime `4a83b175`, Replay `0cfe7a63`, ODES `4e6d1169` and Evidence Pack `683246e0`. Control Plane `a34c3dc2` and Manifest `2c36bcd0` are unchanged.
+
 ## Generation fence F5b effective-grant forwarding (F-17)
 
 - Fixed `LineageGenerationFence.commit_if_current` and `_FencedDestination.commit` to accept and forward `expected_effective_grant_digest` and `effective_grant_derivation_version` to the destination. Previously `run_exchange(generation_fence=...)` on the F5b path raised `TypeError` on every commit, so even the current generation could not commit and no refusal row was persisted (runtime issue cognous-execution-runtime#99, 5a).

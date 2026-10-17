@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## Generation fence F5b effective-grant forwarding (F-17)
+
+- Fixed `LineageGenerationFence.commit_if_current` and `_FencedDestination.commit` to accept and forward `expected_effective_grant_digest` and `effective_grant_derivation_version` to the destination. Previously `run_exchange(generation_fence=...)` on the F5b path raised `TypeError` on every commit, so even the current generation could not commit and no refusal row was persisted (runtime issue cognous-execution-runtime#99, 5a).
+- Fence semantics are unchanged: a superseded generation is refused with a persisted refusal and no effect; the current generation commits. The arguments are forwarded only when supplied, so destinations without F5b support are unaffected.
+- Added regression tests in `tests/test_generation_fence.py`.
+
 ## 0.1.0 — Worker 13 review candidate
 
 - Added separately versioned governed-message transport envelope.

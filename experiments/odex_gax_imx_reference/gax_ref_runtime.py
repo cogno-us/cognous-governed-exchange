@@ -69,11 +69,11 @@ elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-f5b-20261016":
     # Separate F5b merged generation; the 996baeb4 profile above is kept so
     # retained evidence stays reproducible at its historical pins.
     CP_REVISION = "a34c3dc26f84a767a55f9d5c89dc0b53e63fefa5"
-    MOLTBOT_REVISION = "e20f92e104aba2ba6ad06120d8549c6170eaf63f"
+    MOLTBOT_REVISION = "4a83b175d2ef0e65a7ee22a0513bb94a5fdf3a6f"
     MANIFEST_REVISION = "2c36bcd0b620dbfe7ad924bc7196a3f0c04c5c5e"
-    REPLAY_REVISION = "79ba16d48b9be1e059b3045989c7df960c3df1c2"
-    ODES_REVISION = "eb83220c82f942e429a5e3ef5f677fdd5057ef84"
-    EVIDENCE_PACK_REVISION = "893aca8dfb27ba5c5f3e833f2d29210ca7fc92e3"
+    REPLAY_REVISION = "0cfe7a6319930bccad3e9027a1dfbe3d6e29d657"
+    ODES_REVISION = "4e6d11691b9dea56a70026b6519159cf0e0ffd8b"
+    EVIDENCE_PACK_REVISION = "683246e05d291308211778ec48045df65466461f"
 elif RUNTIME_COMPATIBILITY_PROFILE != "persistence-v1":
     raise RuntimeError("unsupported GAX runtime compatibility profile")
 

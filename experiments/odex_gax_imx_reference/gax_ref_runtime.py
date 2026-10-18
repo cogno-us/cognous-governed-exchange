@@ -11,6 +11,7 @@ import os
 import sqlite3
 import subprocess
 import sys
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -118,6 +119,31 @@ def _workflow_options(runtime_authority_profile, allow_test_time=False):
     return {}
 
 
+def _executed_file_problems(executed: list[Path]) -> list[str]:
+    """Problems that make an executed file differ from the revision's blob, whatever ``git status`` says.
+
+    ``git status`` trusts the index: a tracked file marked assume-unchanged or skip-worktree can be modified and still look
+    clean. Each executed file is therefore (1) refused if its index entry carries either flag (``git ls-files -v`` shows
+    lowercase for assume-unchanged and ``S`` for skip-worktree) and (2) hashed from disk (``git hash-object``) and compared
+    with the blob recorded at HEAD.
+    """
+    problems = []
+    for path in executed:
+        path = Path(path).resolve()
+        top = Path(subprocess.check_output(["git", "-C", str(path.parent), "rev-parse", "--show-toplevel"],
+                                           text=True, timeout=10).strip()).resolve()
+        rel = path.relative_to(top).as_posix()
+        for line in subprocess.check_output(["git", "-C", str(top), "ls-files", "-v", "--", rel],
+                                            text=True, timeout=10).splitlines():
+            if line[:1].islower() or line[:1] == "S":
+                problems.append(f"index flag hides modifications: {rel}")
+        head_blob = subprocess.check_output(["git", "-C", str(top), "rev-parse", f"HEAD:{rel}"], text=True, timeout=10).strip()
+        disk_blob = subprocess.check_output(["git", "-C", str(top), "hash-object", "--", rel], text=True, timeout=10).strip()
+        if head_blob != disk_blob:
+            problems.append(f"content differs from the revision: {rel}")
+    return problems
+
+
 def _git_source_identity(directory: Path, tracked: list[Path]) -> tuple[str, str]:
     actual = subprocess.check_output(
         ["git", "-C", str(directory), "rev-parse", "HEAD"], text=True, timeout=10
@@ -128,6 +154,9 @@ def _git_source_identity(directory: Path, tracked: list[Path]) -> tuple[str, str
     ).strip()
     subprocess.run(["git", "-C", str(directory), "ls-files", "--error-unmatch", "--", *map(str, tracked)],
                    check=True, capture_output=True, timeout=10)
+    problems = _executed_file_problems(tracked)
+    if problems:
+        changed = "\n".join(filter(None, [changed, *problems]))
     return actual, changed
 
 
@@ -309,6 +338,12 @@ def _verify_refusal_profile_sources(cp_root: Path | None = None, molt_root: Path
     # change after verification is refused rather than executed.
     for name, (module_file, executed) in verified.items():
         if _locate_without_import(name, None) != (module_file, executed):
+            raise RuntimeError(f"candidate source identity mismatch: {name}")
+        try:
+            rehash_problems = _executed_file_problems(executed)
+        except (subprocess.CalledProcessError, OSError) as exc:
+            raise RuntimeError(f"candidate source identity mismatch: {name}") from exc
+        if rehash_problems:
             raise RuntimeError(f"candidate source identity mismatch: {name}")
         module = importlib.import_module(name)
         if Path(module.__file__).resolve() != module_file:
@@ -841,7 +876,7 @@ def _recover_checkpoint(message: dict[str, Any], assessment: dict[str, Any], man
     return {"assessment": assessment, "execution": {"attempted": False, "reason": "checkpoint_without_dispatch_evidence", "attempt_status": "hold", "effect_id": checkpoint.get("effect_id"), "decision_id": checkpoint.get("decision_id")}, "successor_packet": None}
 
 
-def _run_current_request(*, message: dict[str, Any], bundle: dict[str, Any], manifest: dict[str, Any], destination: Any, store_path: Path, resolver: Any, evaluation_time: str, execution_policy_factory: Any, observation_policy: Any, observation_clock: Any = None, mutate_resolver_after_decision=None, lose_ack: bool = False, partial_delivery: bool = False, store: "TransactionalExchangeStore" | None = None, fault_after_dispatch: bool = False, fault_evidence_once: bool = False, generation_fence: Any = None, lineage_generation: int | None = None, runtime_authority_profile: Any = None, allow_test_time: bool = False) -> dict[str, Any]:
+def _run_current_request(*, message: dict[str, Any], bundle: dict[str, Any], manifest: dict[str, Any], destination: Any, store_path: Path, resolver: Any, evaluation_time: str, execution_policy_factory: Any, observation_policy: Any, observation_clock: Any = None, mutate_resolver_after_decision=None, lose_ack: bool = False, partial_delivery: bool = False, store: "TransactionalExchangeStore" | None = None, lease_holder: str | None = None, fault_after_dispatch: bool = False, fault_evidence_once: bool = False, generation_fence: Any = None, lineage_generation: int | None = None, runtime_authority_profile: Any = None, allow_test_time: bool = False) -> dict[str, Any]:
     runtime = load_executor_runtime()
     cp = runtime["cp"]
     now = parse_time(evaluation_time)
@@ -864,7 +899,10 @@ def _run_current_request(*, message: dict[str, Any], bundle: dict[str, Any], man
         return {"status": decision.result, "decision": decision, "result": None, "destination_effects": {}, "proposal_record": proposal_record, "cp_record": cp_record, "moltbot_record": None, **pipe}
 
     if store is not None:
-        owner=store.claim_effect(message,decision.effect_id)
+        owner=store.claim_effect(message,decision.effect_id,lease_holder)
+        if owner == store.LEASE_HELD:
+            return {"status":"hold","fault":"message_processing_lease_held",
+                    "owner_message_id":message["message_id"],"decision":decision}
         if owner is not None:
             return {"status":"hold","fault":"effect_owned_by_another_message",
                     "owner_message_id":owner,"decision":decision}
@@ -953,7 +991,19 @@ def run_exchange(message: dict[str, Any], bundle: dict[str, Any], registry: Loca
         return {"assessment": assessment, "execution": {"attempted": False, "reason": "execution_policy_factory_required"}, "successor_packet": None}
     if observation_policy is None:
         return {"assessment": assessment, "execution": {"attempted": False, "reason": "observation_policy_required"}, "successor_packet": None}
-    artifacts = _run_current_request(message=message, bundle=bundle, manifest=manifest, destination=destination, store_path=store_path, resolver=resolver, evaluation_time=evaluation_time, execution_policy_factory=execution_policy_factory, observation_policy=observation_policy, observation_clock=observation_clock, mutate_resolver_after_decision=mutate_resolver_after_decision, lose_ack=lose_ack, partial_delivery=partial_delivery, store=store, fault_after_dispatch=fault_after_dispatch, fault_evidence_once=fault_evidence_once, generation_fence=generation_fence, lineage_generation=lineage_generation, runtime_authority_profile=runtime_authority_profile, allow_test_time=allow_test_time)
+    lease_holder = uuid.uuid4().hex
+    try:
+        return _finish_exchange(message, assessment, store, lease_holder, lambda: _run_current_request(message=message, bundle=bundle, manifest=manifest, destination=destination, store_path=store_path, resolver=resolver, evaluation_time=evaluation_time, execution_policy_factory=execution_policy_factory, observation_policy=observation_policy, observation_clock=observation_clock, mutate_resolver_after_decision=mutate_resolver_after_decision, lose_ack=lose_ack, partial_delivery=partial_delivery, store=store, lease_holder=lease_holder, fault_after_dispatch=fault_after_dispatch, fault_evidence_once=fault_evidence_once, generation_fence=generation_fence, lineage_generation=lineage_generation, runtime_authority_profile=runtime_authority_profile, allow_test_time=allow_test_time))
+    finally:
+        store.release_lease(message, lease_holder)
+
+
+def _finish_exchange(message, assessment, store, lease_holder, run_current):
+    artifacts = run_current()
+    if artifacts.get("fault")=="message_processing_lease_held":
+        return {"assessment":assessment,"execution":{"attempted":False,"newly_executed":False,"attempt_status":"hold",
+            "reason":"message_processing_lease_held","effect_id":artifacts["decision"].effect_id,
+            "retry_eligible":False,"recovery_route":"resume_original_exchange"},"successor_packet":None}
     if artifacts.get("fault")=="effect_owned_by_another_message":
         return {"assessment":assessment,"execution":{"attempted":False,"newly_executed":False,"attempt_status":"hold",
             "reason":"effect_owned_by_another_message","effect_id":artifacts["decision"].effect_id,
@@ -1096,6 +1146,7 @@ class TransactionalExchangeStore:
             conn.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS effect_owners(effect_id TEXT PRIMARY KEY,message_id TEXT NOT NULL,message_digest TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS message_leases(message_id TEXT PRIMARY KEY,message_digest TEXT NOT NULL,holder TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS effect_claim_refusals(effect_id TEXT NOT NULL,message_id TEXT NOT NULL,message_digest TEXT NOT NULL,owner_message_id TEXT NOT NULL,reason TEXT NOT NULL,PRIMARY KEY(effect_id,message_id,message_digest));
                 CREATE TABLE IF NOT EXISTS messages(message_id TEXT PRIMARY KEY, message_digest TEXT NOT NULL, conversation_id TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS message_workflows(message_id TEXT PRIMARY KEY,message_digest TEXT NOT NULL,conversation_id TEXT NOT NULL,status TEXT NOT NULL,proposal_commitment TEXT,decision_id TEXT,effect_id TEXT,attempt_id TEXT,proposal_json TEXT NOT NULL,decision_json TEXT NOT NULL,request_json TEXT,result_json TEXT,cp_record_json TEXT NOT NULL,moltbot_json TEXT);
@@ -1111,8 +1162,15 @@ class TransactionalExchangeStore:
             for table in ("dispatch_checkpoints", "message_workflows"):
                 conn.execute(f"INSERT OR IGNORE INTO effect_owners SELECT effect_id,message_id,message_digest FROM {table} WHERE effect_id IS NOT NULL ORDER BY message_id")
 
-    def claim_effect(self, message: dict[str, Any], effect_id: str) -> str | None:
-        """Claim one effect before dispatch; return its existing owner on conflict."""
+    LEASE_HELD = "message_processing_lease_held"
+
+    def claim_effect(self, message: dict[str, Any], effect_id: str, holder: str | None = None) -> str | None:
+        """Claim one effect before dispatch; return its existing owner on conflict.
+
+        With a ``holder`` the same transaction also takes the message's processing lease: a second holder for the same message
+        gets ``LEASE_HELD`` (a hold, no dispatch) until the first releases it. Without a holder the behaviour is the
+        effect-ownership claim only.
+        """
         with self._connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
             conn.execute("INSERT OR IGNORE INTO effect_owners VALUES(?,?,?)",
@@ -1122,8 +1180,24 @@ class TransactionalExchangeStore:
             if conflict:
                 conn.execute("INSERT OR IGNORE INTO effect_claim_refusals VALUES(?,?,?,?,?)",
                     (effect_id,message["message_id"],message["message_digest"],row["message_id"],"effect_owned_by_another_message"))
+                conn.execute("COMMIT")
+                return row["message_id"]
+            if holder is not None:
+                conn.execute("INSERT OR IGNORE INTO message_leases VALUES(?,?,?)",
+                             (message["message_id"],message["message_digest"],holder))
+                lease=conn.execute("SELECT message_digest,holder FROM message_leases WHERE message_id=?",(message["message_id"],)).fetchone()
+                if (lease["message_digest"],lease["holder"]) != (message["message_digest"],holder):
+                    conn.execute("COMMIT")
+                    return self.LEASE_HELD
             conn.execute("COMMIT")
-            return row["message_id"] if conflict else None
+            return None
+
+    def release_lease(self, message: dict[str, Any], holder: str) -> None:
+        """Release the processing lease this holder took; another holder's lease is never touched."""
+        with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute("DELETE FROM message_leases WHERE message_id=? AND holder=?",(message["message_id"],holder))
+            conn.execute("COMMIT")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.path, timeout=10, isolation_level=None)
@@ -1168,11 +1242,23 @@ class TransactionalExchangeStore:
             if row is None or row["message_digest"] != message["message_digest"]:
                 conn.execute("ROLLBACK")
                 raise RuntimeError("message receipt must be recorded before dispatch checkpoint")
-            prior = conn.execute("SELECT decision_id,effect_id,proposal_commitment FROM dispatch_checkpoints WHERE message_id=?", (message["message_id"],)).fetchone()
+            prior = conn.execute("SELECT state,decision_id,effect_id,proposal_commitment,result_json FROM dispatch_checkpoints WHERE message_id=?", (message["message_id"],)).fetchone()
             if prior and (prior["decision_id"] != decision_id or prior["effect_id"] != effect_id or prior["proposal_commitment"] != proposal_commitment):
                 conn.execute("ROLLBACK")
                 raise RuntimeError("dispatch checkpoint identity cannot be replaced")
-            conn.execute("""INSERT OR REPLACE INTO dispatch_checkpoints(message_id,message_digest,conversation_id,state,proposal_commitment,decision_id,effect_id,attempt_id,proposal_json,decision_json,request_json,result_json,cp_record_json,moltbot_json,faults_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,COALESCE((SELECT faults_json FROM dispatch_checkpoints WHERE message_id=?),'{}'))""", (message["message_id"], message["message_digest"], message["conversation_id"], state, proposal_commitment, decision_id, effect_id, attempt_id, _json_dumps(proposal), _json_dumps(decision), _json_dumps(request) if request is not None else None, _json_dumps(result) if result is not None else None, _json_dumps(artifacts["cp_record"]), _json_dumps(artifacts.get("moltbot_record")) if artifacts.get("moltbot_record") is not None else None, message["message_id"]))
+            values = (state, proposal_commitment, decision_id, effect_id, attempt_id, _json_dumps(proposal), _json_dumps(decision), _json_dumps(request) if request is not None else None, _json_dumps(result) if result is not None else None, _json_dumps(artifacts["cp_record"]), _json_dumps(artifacts.get("moltbot_record")) if artifacts.get("moltbot_record") is not None else None)
+            if prior is None:
+                conn.execute("""INSERT INTO dispatch_checkpoints(message_id,message_digest,conversation_id,state,proposal_commitment,decision_id,effect_id,attempt_id,proposal_json,decision_json,request_json,result_json,cp_record_json,moltbot_json,faults_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'{}')""", (message["message_id"], message["message_digest"], message["conversation_id"], *values))
+            elif prior["state"] == "bound" and state == "dispatched":
+                # The one allowed advance: the bound checkpoint becomes dispatched, once.
+                conn.execute("""UPDATE dispatch_checkpoints SET state=?,proposal_commitment=?,decision_id=?,effect_id=?,attempt_id=?,proposal_json=?,decision_json=?,request_json=?,result_json=?,cp_record_json=?,moltbot_json=? WHERE message_id=? AND state='bound'""", (*values, message["message_id"]))
+            elif prior["state"] == "bound" and state == "bound":
+                pass  # a repeated bound write keeps the first
+            elif prior["state"] == "dispatched" and state == "dispatched" and prior["result_json"] == values[8]:
+                pass  # the same dispatched record again
+            else:
+                conn.execute("ROLLBACK")
+                raise RuntimeError("dispatch checkpoint cannot be replaced or moved back")
             conn.execute("COMMIT")
 
     def checkpoint_for_message(self, message: dict[str, Any]) -> dict[str, Any] | None:
@@ -1239,9 +1325,19 @@ class TransactionalExchangeStore:
                 conn.execute("ROLLBACK")
                 raise RuntimeError(problem)
             encoded_export = _json_dumps(artifact_export)
-            conn.execute("""INSERT OR REPLACE INTO message_workflows(message_id,message_digest,conversation_id,status,proposal_commitment,decision_id,effect_id,attempt_id,proposal_json,decision_json,request_json,result_json,cp_record_json,moltbot_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (message["message_id"], message["message_digest"], message["conversation_id"], status, proposal_commitment, decision_id, effect_id, attempt_id, _json_dumps(proposal), _json_dumps(decision), _json_dumps(request) if request is not None else None, _json_dumps(result) if result is not None else None, _json_dumps(artifacts["cp_record"]), _json_dumps(artifacts.get("moltbot_record")) if artifacts.get("moltbot_record") is not None else None))
+            workflow_values = (message["message_id"], message["message_digest"], message["conversation_id"], status, proposal_commitment, decision_id, effect_id, attempt_id, _json_dumps(proposal), _json_dumps(decision), _json_dumps(request) if request is not None else None, _json_dumps(result) if result is not None else None, _json_dumps(artifacts["cp_record"]), _json_dumps(artifacts.get("moltbot_record")) if artifacts.get("moltbot_record") is not None else None)
+            prior = conn.execute("SELECT * FROM message_workflows WHERE message_id=?", (message["message_id"],)).fetchone()
+            if prior is not None:
+                prior_export = conn.execute("SELECT artifact_digest FROM artifact_exports WHERE message_id=?", (message["message_id"],)).fetchone()
+                same = (tuple(prior[k] for k in ("message_id","message_digest","conversation_id","status","proposal_commitment","decision_id","effect_id","attempt_id","proposal_json","decision_json","request_json","result_json","cp_record_json","moltbot_json")) == tuple(workflow_values)
+                        and prior_export is not None and prior_export["artifact_digest"] == digest(artifact_export))
+                conn.execute("ROLLBACK" if not same else "COMMIT")
+                if not same:
+                    raise RuntimeError("workflow association is already recorded and cannot be replaced")
+                return
+            conn.execute("""INSERT INTO message_workflows(message_id,message_digest,conversation_id,status,proposal_commitment,decision_id,effect_id,attempt_id,proposal_json,decision_json,request_json,result_json,cp_record_json,moltbot_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", workflow_values)
             conn.execute(
-                """INSERT OR REPLACE INTO artifact_exports(message_id,message_digest,conversation_id,export_profile,export_version,state,artifact_json,artifact_digest) VALUES(?,?,?,?,?,?,?,?)""",
+                """INSERT INTO artifact_exports(message_id,message_digest,conversation_id,export_profile,export_version,state,artifact_json,artifact_digest) VALUES(?,?,?,?,?,?,?,?)""",
                 (
                     message["message_id"], message["message_digest"], message["conversation_id"],
                     artifact_export["export_profile"], artifact_export["export_version"],

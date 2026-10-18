@@ -92,7 +92,7 @@ elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-p2-20261018":
     MOLTBOT_REVISION = "11de097c450d3ad4d89f9add41b00e38e7cc2c7c"
     MANIFEST_REVISION = "2c36bcd0b620dbfe7ad924bc7196a3f0c04c5c5e"
     REPLAY_REVISION = "46e8bd7c263f5075cac3a7a9defcb265384f40e9"
-    ODES_REVISION = "e2cbc0dcee795d1ba100e028107fdfe6d0bc9e21"
+    ODES_REVISION = "cdf704c88bb6542e3f1121a5ceb6cb03fc7d6a52"
     EVIDENCE_PACK_REVISION = "4fbbd34418f8dce7a536879d7bd0378737179f47"
 elif RUNTIME_COMPATIBILITY_PROFILE != "persistence-v1":
     raise RuntimeError("unsupported GAX runtime compatibility profile")

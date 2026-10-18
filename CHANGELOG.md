@@ -1,3 +1,7 @@
+## Programme 2 profile: ODES pin aligned to e2cbc0dc (18 October 2026)
+
+- The `security-runtime-p2-20261018` profile now pins ODES `e2cbc0dc`, the docs-only ODES change (names the P4 and P2 export profile versions as non-selected candidates) on top of `81979784`. The ODES source modules are unchanged; the exact-revision check compares the checkout's Git identity, so the pin follows the ODES `main` revision that qualification r7 names. No identity check changed. The P4 and F5b profiles are unchanged.
+
 # CHANGELOG
 
 ## Programme 2 profile: ODES pin corrected to 81979784 (18 October 2026)

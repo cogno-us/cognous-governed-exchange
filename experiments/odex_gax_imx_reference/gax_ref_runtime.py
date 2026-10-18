@@ -144,6 +144,55 @@ def _executed_file_problems(executed: list[Path]) -> list[str]:
     return problems
 
 
+def _checkout_source_problems(top: Path) -> list[str]:
+    """Problems with any tracked file of a checkout, not only the entry modules.
+
+    Modules that an entry module imports run as well. Every tracked file is therefore (1) refused if its index entry carries
+    an assume-unchanged or skip-worktree flag, (2) required to exist and (3) hashed from disk and compared with the blob
+    recorded at HEAD. A tracked entry that cannot be compared this way (a submodule, a path with a newline) is refused.
+    """
+    def git(*args, **kwargs):
+        return subprocess.run(["git", "-C", str(top), *args], check=True, text=True, capture_output=True,
+                              timeout=120, **kwargs).stdout
+
+    problems = []
+    for line in git("ls-files", "-v", "-z").split("\0"):
+        if line and (line[0].islower() or line[0] == "S"):
+            problems.append(f"index flag hides modifications: {line[2:]}")
+    head = {}
+    for entry in git("ls-tree", "-r", "-z", "HEAD").split("\0"):
+        if entry:
+            meta, rel = entry.split("\t", 1)
+            mode, kind, blob = meta.split()
+            head[rel] = (mode, kind, blob)
+    disk = []
+    for rel, (mode, kind, blob) in sorted(head.items()):
+        path = top / rel
+        if kind != "blob" or "\n" in rel:
+            problems.append(f"cannot be compared with the revision: {rel}")
+        elif mode == "120000":
+            if not path.is_symlink() or git("hash-object", "--stdin", input=os.readlink(path)).strip() != blob:
+                problems.append(f"content differs from the revision: {rel}")
+        elif path.is_symlink() or not path.is_file():
+            problems.append(f"content differs from the revision: {rel}")
+        else:
+            disk.append(rel)
+    def hashes(paths, *flags):
+        out = git("hash-object", *flags, "--stdin-paths", input="\n".join(paths) + "\n").split() if paths else []
+        if len(out) != len(paths):
+            raise ValueError("hash count mismatch")
+        return out
+
+    # Raw bytes equal to the blob are unmodified. A file that differs raw is accepted only when git's own line-ending
+    # normalisation for its path yields the blob (the comparison git status makes); anything else differs.
+    raw = hashes(disk, "--no-filters")
+    rest = [rel for rel, digest in zip(disk, raw) if head[rel][2] != digest]
+    for rel, digest in zip(rest, hashes(rest)):
+        if head[rel][2] != digest:
+            problems.append(f"content differs from the revision: {rel}")
+    return problems
+
+
 def _git_source_identity(directory: Path, tracked: list[Path]) -> tuple[str, str]:
     actual = subprocess.check_output(
         ["git", "-C", str(directory), "rev-parse", "HEAD"], text=True, timeout=10
@@ -305,6 +354,12 @@ def _verify_refusal_profile_sources(cp_root: Path | None = None, molt_root: Path
             raise RuntimeError(f"candidate source identity mismatch: {name}") from exc
         if actual != revision or changed:
             raise RuntimeError(f"candidate source identity mismatch: {name}")
+        try:
+            tree_problems = _checkout_source_problems(toplevel)
+        except (subprocess.CalledProcessError, OSError, ValueError) as exc:
+            raise RuntimeError(f"candidate source identity mismatch: {name}") from exc
+        if tree_problems:
+            raise RuntimeError(f"candidate source identity mismatch: {name}")
         if untracked:
             _refuse_untracked(name, [executed[0].parent / untracked.splitlines()[0]])
         verified[name] = (module_file, executed)
@@ -340,8 +395,8 @@ def _verify_refusal_profile_sources(cp_root: Path | None = None, molt_root: Path
         if _locate_without_import(name, None) != (module_file, executed):
             raise RuntimeError(f"candidate source identity mismatch: {name}")
         try:
-            rehash_problems = _executed_file_problems(executed)
-        except (subprocess.CalledProcessError, OSError) as exc:
+            rehash_problems = _executed_file_problems(executed) + _checkout_source_problems(checkouts[name][0])
+        except (subprocess.CalledProcessError, OSError, ValueError) as exc:
             raise RuntimeError(f"candidate source identity mismatch: {name}") from exc
         if rehash_problems:
             raise RuntimeError(f"candidate source identity mismatch: {name}")

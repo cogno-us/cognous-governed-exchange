@@ -342,6 +342,14 @@ P4_PINS = {
     "ODES_REVISION": "c5f4e2d0015ccdc94127a4025a6b605fc7fbdcbd",
     "EVIDENCE_PACK_REVISION": "54df6984dd418e2e0a09f89e54f281493475831c",
 }
+P2_PINS = {
+    "CP_REVISION": "3cd17ead6b24301290ad1e50ae4b22bbd93c12fb",
+    "MOLTBOT_REVISION": "11de097c450d3ad4d89f9add41b00e38e7cc2c7c",
+    "MANIFEST_REVISION": "2c36bcd0b620dbfe7ad924bc7196a3f0c04c5c5e",
+    "REPLAY_REVISION": "46e8bd7c263f5075cac3a7a9defcb265384f40e9",
+    "ODES_REVISION": "0663d5a24a2d94b83f51f611f30b3b3f144d6c5d",
+    "EVIDENCE_PACK_REVISION": "4fbbd34418f8dce7a536879d7bd0378737179f47",
+}
 RETAINED_SECURITY_PINS = {
     "CP_REVISION": "996baeb476c8745b1a58ddc968b9eecc6a39b76b",
     "MOLTBOT_REVISION": "fd6b76fa0e85feb5b67324114bf790d3a12fdaf1",
@@ -355,6 +363,7 @@ RETAINED_SECURITY_PINS = {
 @pytest.mark.parametrize("profile, pins", [
     ("security-runtime-f5b-20261016", F5B_PINS),
     ("security-runtime-p4-20261017", P4_PINS),
+    ("security-runtime-p2-20261018", P2_PINS),
     ("security-runtime-candidate-20261016", RETAINED_SECURITY_PINS),
 ])
 def test_security_runtime_generations_select_exact_separate_pins(monkeypatch, profile, pins):
@@ -367,7 +376,7 @@ def test_security_runtime_generations_select_exact_separate_pins(monkeypatch, pr
 
 
 @pytest.mark.parametrize("profile", ["security-runtime-f5b-20261016", "security-runtime-p4-20261017",
-                                     "security-runtime-candidate-20261016"])
+                                     "security-runtime-p2-20261018", "security-runtime-candidate-20261016"])
 def test_security_runtime_generations_require_trusted_configuration(monkeypatch, profile):
     module = _load_with_profile(monkeypatch, profile)
     assert profile in module.SECURITY_RUNTIME_PROFILES and profile in module.STRICT_SOURCE_PROFILES
@@ -387,7 +396,7 @@ def test_historical_profiles_reject_runtime_authority_options(monkeypatch):
 
 def test_unknown_profile_still_refused(monkeypatch):
     with pytest.raises(RuntimeError, match="unsupported GAX runtime compatibility profile"):
-        _load_with_profile(monkeypatch, "security-runtime-p4-20261018")
+        _load_with_profile(monkeypatch, "security-runtime-p2-20261019")
 
 
 # evidence_refs replay-bundle digest binding (issue #30) ---------------------------------------

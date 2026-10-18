@@ -84,11 +84,21 @@ elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-p4-20261017":
     REPLAY_REVISION = "9aab3f6c34d2721ef1be3f6468b71dc3bad99a2a"
     ODES_REVISION = "c5f4e2d0015ccdc94127a4025a6b605fc7fbdcbd"
     EVIDENCE_PACK_REVISION = "54df6984dd418e2e0a09f89e54f281493475831c"
+elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-p2-20261018":
+    # Programme 2 generation (qualification p2): the producers after the Programme 2 hardening work. Added beside
+    # P4 and F5b, which are kept unchanged so retained evidence stays reproducible. Alpha scaffolding, removed with
+    # the other hard pins at end-of-alpha (P5).
+    CP_REVISION = "3cd17ead6b24301290ad1e50ae4b22bbd93c12fb"
+    MOLTBOT_REVISION = "11de097c450d3ad4d89f9add41b00e38e7cc2c7c"
+    MANIFEST_REVISION = "2c36bcd0b620dbfe7ad924bc7196a3f0c04c5c5e"
+    REPLAY_REVISION = "46e8bd7c263f5075cac3a7a9defcb265384f40e9"
+    ODES_REVISION = "0663d5a24a2d94b83f51f611f30b3b3f144d6c5d"
+    EVIDENCE_PACK_REVISION = "4fbbd34418f8dce7a536879d7bd0378737179f47"
 elif RUNTIME_COMPATIBILITY_PROFILE != "persistence-v1":
     raise RuntimeError("unsupported GAX runtime compatibility profile")
 
 # Profiles that require trusted runtime-authority configuration.
-SECURITY_RUNTIME_PROFILES = frozenset({"security-runtime-candidate-20261016", "security-runtime-f5b-20261016", "security-runtime-p4-20261017"})
+SECURITY_RUNTIME_PROFILES = frozenset({"security-runtime-candidate-20261016", "security-runtime-f5b-20261016", "security-runtime-p4-20261017", "security-runtime-p2-20261018"})
 # Profiles whose candidate sources are verified before import.
 STRICT_SOURCE_PROFILES = frozenset({"typed-refusal-candidate-20261015", *SECURITY_RUNTIME_PROFILES})
 

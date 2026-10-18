@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## Programme 2 profile: ODES pin corrected to 81979784 (18 October 2026)
+
+- The `security-runtime-p2-20261018` profile now pins ODES `81979784` (the commit that carries the Programme 2 compatibility tuple) instead of `0663d5a2`, which lacks it. No identity check changed; the profile is simply pinned to the ODES revision that matches the other four peers. The P4 and F5b profiles are unchanged.
+
 ## Programme 2 compatibility profile security-runtime-p2-20261018 (18 October 2026)
 
 - Added the runtime compatibility profile `security-runtime-p2-20261018` beside `security-runtime-p4-20261017` and `security-runtime-f5b-20261016` (both unchanged, so retained evidence stays reproducible): Control Plane `3cd17ead`, runtime `11de097c`, Manifest `2c36bcd0` (unchanged), Replay `46e8bd7c`, ODES `0663d5a2` and Evidence Pack `4fbbd344`. Strict source verification compares the checkouts to these constants exactly as for the other profiles; no identity check was loosened. Alpha scaffolding, removed with the other hard pins at end-of-alpha (P5).

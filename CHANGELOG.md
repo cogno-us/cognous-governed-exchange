@@ -1,3 +1,7 @@
+## Source check covers the whole checkout (19 October 2026)
+
+- Experimental exchange, no contract change and no pin change. The strict source check now compares every tracked file of each checked checkout with its recorded revision and refuses assume-unchanged or skip-worktree index entries anywhere in it, so a module imported by one of the verified entry modules is covered as well. A tracked entry that cannot be compared (submodule, missing file) is refused. Clean checkouts load as before.
+
 ## Security-review hardening (18 October 2026)
 
 - Programme-2 compatibility profile `security-runtime-p2-20261018` re-tied (final pin round, no behaviour change) to the final revisions: control plane `6093aca7`, runtime `62a5cc15`, manifest `f9ae8527`, Replay `c8e665bd`, ODES `bff8307c`, evidence pack `cde3f1f1` (was `3cd17ead` / `11de097c` / `2c36bcd0` / `46e8bd7c` / `cdf704c8` / `4fbbd344`). The strict source check compares each checkout's Git HEAD to these strings exactly. P4, F5b and the earlier profiles are unchanged.

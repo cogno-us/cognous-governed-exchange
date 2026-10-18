@@ -17,6 +17,7 @@ RECIPIENT_RESULT_VERSION = "1.0.0"
 CANONICALIZATION_VERSION = "json-sort-keys-compact-v1"
 ACK_KIND_DURABLE_RECEIPT = "DURABLE_RECEIPT"
 ACK_KIND_DURABLE_RECEIPT_UNRESOLVED = "DURABLE_RECEIPT_UNRESOLVED"
+UNRESOLVED_RESULT_STATES = frozenset({"recovery_required", "historical_artifacts_unavailable"})
 MAX_ACK_FIELD_CHARS = 256
 MAX_ACK_REASON_CHARS = 512
 
@@ -640,8 +641,10 @@ class TransportStore:
         refs_json = json.dumps(payload["producer_refs"], sort_keys=True, separators=(",", ":"))
         result_row = (payload["result_profile"], payload["result_version"], payload["result_state"], encoded_artifact, artifact_digest)
         with sqlite3.connect(self.path, isolation_level="IMMEDIATE") as con:
+            con.row_factory = sqlite3.Row
             # Insert-once: the first recorded outcome stands. A repeat of the same outcome is a no-op; a different one is
-            # refused rather than replacing retained evidence.
+            # refused rather than replacing retained evidence, except that an unresolved outcome (recovery required, or
+            # retained without artifacts) may be completed once by recovery.
             updated = con.execute(
                 """
                 UPDATE inbox
@@ -658,11 +661,27 @@ class TransportStore:
                     "SELECT result_profile,result_version,state,artifact_export_json,artifact_export_digest "
                     "FROM recipient_results WHERE message_id=?", (message_id,)
                 ).fetchone()
-                if prior is None or tuple(prior) != (assessment_json, execution_json, refs_json) or (
-                        stored is not None and tuple(stored) != result_row):
-                    raise ValueError("recipient outcome is already recorded and cannot be replaced")
-                if stored is not None:
+                if prior is None:
+                    raise ValueError("recipient outcome cannot be recorded for an unknown message")
+                stored_state = stored["state"] if stored is not None else "historical_artifacts_unavailable"
+                identical = tuple(prior) == (assessment_json, execution_json, refs_json) and (stored is None or tuple(stored) == result_row)
+                if identical and stored is not None:
                     return
+                if not identical:
+                    if stored_state not in UNRESOLVED_RESULT_STATES:
+                        raise ValueError("recipient outcome is already recorded and cannot be replaced")
+                    # The one allowed advance: a retained-but-unresolved outcome is completed by recovery (UPDATE, not replace).
+                    con.execute(
+                        "UPDATE inbox SET assessment_json=?,execution_json=?,producer_refs_json=? WHERE message_id=?",
+                        (assessment_json, execution_json, refs_json, message_id),
+                    )
+                    if stored is not None:
+                        con.execute(
+                            """UPDATE recipient_results SET result_profile=?,result_version=?,state=?,
+                               artifact_export_json=?,artifact_export_digest=? WHERE message_id=?""",
+                            (*result_row, message_id),
+                        )
+                        return
             con.execute(
                 """
                 INSERT OR IGNORE INTO recipient_results(

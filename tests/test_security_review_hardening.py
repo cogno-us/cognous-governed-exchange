@@ -281,3 +281,24 @@ def test_ordinary_identifiers_are_stored_unchanged(tmp_path):
     t = transport(tmp_path, DurableFixtureHandler(tmp_path / "effects.sqlite"))
     ack = t.receive_envelope(_envelope(transport_version="x"), now=NOW)
     assert ack["message_id"] == "msg-1" and len(ack["delivery_attempt_id"]) <= MAX_ACK_FIELD_CHARS
+
+
+def test_an_unresolved_recipient_outcome_may_be_completed_once_by_recovery(tmp_path):
+    from experiments.governed_message_transport import RecipientOutcome
+    handler = DurableFixtureHandler(tmp_path / "effects.sqlite")
+    t = transport(tmp_path, handler)
+    item = message()
+    queue(t, item)
+    t.recipient_store.record_inbox_before_ack(envelope=_envelope(), now=NOW)
+    pending = RecipientOutcome(assessment={"permitted_handling": "ACCEPT_FOR_ASSESSMENT"}, execution={"attempted": False},
+                               producer_refs={}, result_state="recovery_required", artifact_export=None)
+    t.recipient_store.record_recipient_outcome(item["message_id"], pending)
+    recovered = RecipientOutcome(assessment={"permitted_handling": "ACCEPT_FOR_ASSESSMENT"}, execution={"attempted": True, "effect_id": "e"},
+                                 producer_refs={"effect_id": "e"}, result_state="retained", artifact_export={"state": "s"})
+    t.recipient_store.record_recipient_outcome(item["message_id"], recovered)
+    assert t.recipient_store.prior_outcome(item["message_id"]).result_state == "retained"
+    other = RecipientOutcome(assessment={"permitted_handling": "ACCEPT_FOR_ASSESSMENT"}, execution={"attempted": True, "effect_id": "other"},
+                             producer_refs={"effect_id": "other"}, result_state="retained", artifact_export={"state": "s"})
+    with pytest.raises(ValueError, match="cannot be replaced"):
+        t.recipient_store.record_recipient_outcome(item["message_id"], other)
+    assert t.recipient_store.prior_outcome(item["message_id"]).execution["effect_id"] == "e"

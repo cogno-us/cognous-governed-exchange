@@ -17,6 +17,31 @@ RECIPIENT_RESULT_VERSION = "1.0.0"
 CANONICALIZATION_VERSION = "json-sort-keys-compact-v1"
 ACK_KIND_DURABLE_RECEIPT = "DURABLE_RECEIPT"
 ACK_KIND_DURABLE_RECEIPT_UNRESOLVED = "DURABLE_RECEIPT_UNRESOLVED"
+MAX_ACK_FIELD_CHARS = 256
+MAX_ACK_REASON_CHARS = 512
+
+
+def _bounded_text(value: str, limit: int) -> str:
+    if len(value) <= limit:
+        return value
+    return value[:limit] + f"...[truncated {len(value) - limit} characters]"
+
+
+def _bounded_field(value: Any) -> Any:
+    """Bound an envelope-supplied identifier before it is stored in an acknowledgement.
+
+    A short string is kept. Anything else (an oversized string, a container, a number outside the expected shape) is stored
+    as a fixed-size marker holding its type and a SHA-256 of its text form, so repeated oversized input cannot grow rows.
+    """
+    if value is None or (isinstance(value, str) and len(value) <= MAX_ACK_FIELD_CHARS):
+        return value
+    try:
+        text = value if isinstance(value, str) else json.dumps(value, sort_keys=True, default=str)
+    except (TypeError, ValueError, RecursionError):
+        text = "unrepresentable"
+    return f"unbounded:{type(value).__name__}:sha256:{hashlib.sha256(text.encode('utf-8', 'replace')).hexdigest()}"
+
+
 ACK_KIND_TERMINAL_REJECTION = "TERMINAL_REJECTION"
 EXECUTION_ELIGIBLE_TYPES = {"PROPOSE", "REQUEST"}
 INFORMATIONAL_TYPES = {"REPORT", "REFUSE", "NOT_UNDERSTOOD"}
@@ -610,31 +635,42 @@ class TransportStore:
             if artifact is not None else None
         )
         artifact_digest = commitment(artifact) if artifact is not None else None
+        assessment_json = json.dumps(payload["assessment"], sort_keys=True, separators=(",", ":"))
+        execution_json = json.dumps(payload["execution"], sort_keys=True, separators=(",", ":"))
+        refs_json = json.dumps(payload["producer_refs"], sort_keys=True, separators=(",", ":"))
+        result_row = (payload["result_profile"], payload["result_version"], payload["result_state"], encoded_artifact, artifact_digest)
         with sqlite3.connect(self.path, isolation_level="IMMEDIATE") as con:
-            con.execute(
+            # Insert-once: the first recorded outcome stands. A repeat of the same outcome is a no-op; a different one is
+            # refused rather than replacing retained evidence.
+            updated = con.execute(
                 """
                 UPDATE inbox
                 SET assessment_json=?,execution_json=?,producer_refs_json=?
-                WHERE message_id=?
+                WHERE message_id=? AND assessment_json IS NULL
                 """,
-                (
-                    json.dumps(payload["assessment"], sort_keys=True, separators=(",", ":")),
-                    json.dumps(payload["execution"], sort_keys=True, separators=(",", ":")),
-                    json.dumps(payload["producer_refs"], sort_keys=True, separators=(",", ":")),
-                    message_id,
-                ),
-            )
+                (assessment_json, execution_json, refs_json, message_id),
+            ).rowcount
+            if updated == 0:
+                prior = con.execute(
+                    "SELECT assessment_json,execution_json,producer_refs_json FROM inbox WHERE message_id=?", (message_id,)
+                ).fetchone()
+                stored = con.execute(
+                    "SELECT result_profile,result_version,state,artifact_export_json,artifact_export_digest "
+                    "FROM recipient_results WHERE message_id=?", (message_id,)
+                ).fetchone()
+                if prior is None or tuple(prior) != (assessment_json, execution_json, refs_json) or (
+                        stored is not None and tuple(stored) != result_row):
+                    raise ValueError("recipient outcome is already recorded and cannot be replaced")
+                if stored is not None:
+                    return
             con.execute(
                 """
-                INSERT OR REPLACE INTO recipient_results(
+                INSERT OR IGNORE INTO recipient_results(
                     message_id,result_profile,result_version,state,
                     artifact_export_json,artifact_export_digest
                 ) VALUES(?,?,?,?,?,?)
                 """,
-                (
-                    message_id, payload["result_profile"], payload["result_version"],
-                    payload["result_state"], encoded_artifact, artifact_digest,
-                ),
+                (message_id, *result_row),
             )
 
     def prior_outcome(self, message_id: str) -> RecipientOutcome | None:
@@ -832,14 +868,18 @@ class LocalDurableTransport:
         kind: str,
         detail: dict[str, Any],
     ) -> dict[str, Any]:
+        # Rejections are written before the sender is trusted: every value copied from the envelope is bounded first.
+        detail = dict(detail)
+        if isinstance(detail.get("reason"), str):
+            detail["reason"] = _bounded_text(detail["reason"], MAX_ACK_REASON_CHARS)
         ack = {
             "acknowledgement_id": self.ack_id_factory(),
             "acknowledgement_kind": kind,
-            "message_id": envelope.get("message_id"),
-            "delivery_attempt_id": envelope.get("delivery_attempt_id"),
-            "content_commitment": envelope.get("content_commitment"),
-            "recipient_endpoint_ref": envelope.get("recipient_endpoint_ref"),
-            "created_at": now,
+            "message_id": _bounded_field(envelope.get("message_id")),
+            "delivery_attempt_id": _bounded_field(envelope.get("delivery_attempt_id")),
+            "content_commitment": _bounded_field(envelope.get("content_commitment")),
+            "recipient_endpoint_ref": _bounded_field(envelope.get("recipient_endpoint_ref")),
+            "created_at": _bounded_field(now),
             "detail": detail,
         }
         self.recipient_store.record_ack(ack)

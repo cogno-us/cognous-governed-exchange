@@ -65,10 +65,10 @@ The fence wraps `commit()` only; any other destination method is forwarded
 unchanged, and `commit()` takes no operation id. `run_exchange` uses the
 route-A destination, so an atomic destination (`execute_claim_atomic`) or the
 operation-identity profile is not supported behind the fence. `generation` is
-documented as a non-negative integer; the fence and `run_exchange` currently
-also accept a float with an integral value (`5.0` matches head 5), and
-`run_exchange` truncates a non-integral float with `int()`. Callers should pass
-an `int`.
+a non-negative plain `int`: the fence claim refuses any other type (a float,
+integral or not, a `bool` or an `int` subclass) with `ValueError`, and
+`run_exchange` refuses such a `lineage_generation` before recording the message,
+with reason `lineage_generation_invalid`.
 
 ## F5b effective-grant arguments
 

@@ -974,7 +974,7 @@ def _run_current_request(*, message: dict[str, Any], bundle: dict[str, Any], man
         claim = GenerationFenceClaim(
             conversation_id=message["conversation_id"],
             effect_id=decision.effect_id,
-            generation=int(lineage_generation),
+            generation=lineage_generation,
         )
         execution_destination = generation_fence.wrap_destination(destination, claim)
     if store is not None:
@@ -1023,6 +1023,9 @@ def run_exchange(message: dict[str, Any], bundle: dict[str, Any], registry: Loca
     assessment = assess_message(message, bundle, registry, evaluation_time=evaluation_time, seen_messages=seen_messages)
     if assessment["permitted_handling"] != "ACCEPT_FOR_ASSESSMENT":
         return {"assessment": assessment, "execution": {"attempted": False, "reason": "message_not_execution_eligible"}, "successor_packet": None}
+    if lineage_generation is not None and (type(lineage_generation) is not int or lineage_generation < 0):
+        assessment["errors"].append("GAX-EXECUTION-LINEAGE-GENERATION-INVALID")
+        return {"assessment": assessment, "execution": {"attempted": False, "reason": "lineage_generation_invalid"}, "successor_packet": None}
     duplicate, err = store.record_message(message)
     if err:
         return {"assessment": {"permitted_handling": "REFUSE", "errors": [err], "stages": {"identity_binding": "failed"}}, "execution": {"attempted": False, "reason": err}, "successor_packet": None}

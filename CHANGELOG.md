@@ -1,3 +1,7 @@
+## Generation type check (19 October 2026)
+
+- Experimental exchange, no contract change and no pin change. Input validation: the lineage generation must be a plain `int` (at least 0). The fence claim refuses a float (integral or not), a `bool` or an `int` subclass, and `run_exchange` returns `lineage_generation_invalid` before recording the message instead of truncating with `int()`. Valid integer generations behave as before.
+
 ## Source check covers the whole checkout (19 October 2026)
 
 - Experimental exchange, no contract change and no pin change. The strict source check now compares every tracked file of each checked checkout with its recorded revision and refuses assume-unchanged or skip-worktree index entries anywhere in it, so a module imported by one of the verified entry modules is covered as well. A tracked entry that cannot be compared (submodule, missing file) is refused. Clean checkouts load as before.

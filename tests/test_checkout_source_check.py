@@ -93,3 +93,17 @@ def test_file_the_check_cannot_compare_is_refused(fake_checkouts, monkeypatch):
     runtime.REPLAY_REVISION = _git(repo, "rev-parse", "HEAD")
     with pytest.raises(RuntimeError, match="candidate source identity mismatch"):
         runtime.load_executor_runtime()
+
+
+def test_committed_mixed_line_endings_under_a_normalising_attribute_still_load(fake_checkouts, monkeypatch):
+    roots, marker = fake_checkouts
+    monkeypatch.setattr(runtime, "REPLAY_REVISION", runtime.REPLAY_REVISION)
+    repo = roots["replay"]
+    (repo / ".gitattributes").write_text("* text=auto eol=lf\n")
+    (repo / "tools").mkdir()
+    (repo / OUTSIDE).write_bytes(b"SAFE = True\r\nOTHER = 1\n")
+    _git(repo, "add", "-A")
+    _git(repo, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "mixed")
+    monkeypatch.setattr(runtime, "REPLAY_REVISION", _git(repo, "rev-parse", "HEAD"))
+    runtime.load_executor_runtime()
+    assert not marker.exists()

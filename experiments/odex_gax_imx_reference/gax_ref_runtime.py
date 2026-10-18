@@ -177,10 +177,17 @@ def _checkout_source_problems(top: Path) -> list[str]:
             problems.append(f"content differs from the revision: {rel}")
         else:
             disk.append(rel)
-    hashed = git("hash-object", "--stdin-paths", input="\n".join(disk) + "\n").split() if disk else []
-    if len(hashed) != len(disk):
-        problems.append("cannot be compared with the revision: checkout")
-    for rel, digest in zip(disk, hashed):
+    def hashes(paths, *flags):
+        out = git("hash-object", *flags, "--stdin-paths", input="\n".join(paths) + "\n").split() if paths else []
+        if len(out) != len(paths):
+            raise ValueError("hash count mismatch")
+        return out
+
+    # Raw bytes equal to the blob are unmodified. A file that differs raw is accepted only when git's own line-ending
+    # normalisation for its path yields the blob (the comparison git status makes); anything else differs.
+    raw = hashes(disk, "--no-filters")
+    rest = [rel for rel, digest in zip(disk, raw) if head[rel][2] != digest]
+    for rel, digest in zip(rest, hashes(rest)):
         if head[rel][2] != digest:
             problems.append(f"content differs from the revision: {rel}")
     return problems

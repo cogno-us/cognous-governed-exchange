@@ -12,6 +12,12 @@ Immediately at the local destination commit boundary it opens
 `BEGIN IMMEDIATE` on the exchange SQLite store, reads the authoritative head,
 and calls the destination commit only while that write lock is held.
 
+The refusal reason (`superseded_lineage_generation`) is retained in the fence's
+refusal record. With the runtime revision pinned by the current profile, the
+executor result for a refused claim carries the class name
+`GenerationFenceRefusal` as its error text (status `failed`) rather than the
+typed reason.
+
 A v3 effect claim therefore fails closed if v4 is already authoritative. A head
 update that acquires the same SQLite write lock first is observed before effect
 commit. A head update that waits behind an in-progress accepted effect can become
@@ -39,8 +45,9 @@ After the detail-row cap, refusal evidence is aggregated into the bounded
 counter row. Counters saturate at a configured maximum rather than growing
 without bound. Both detail rows and counters survive process restart.
 
-If refusal persistence is disabled or cannot be verified, the fence raises a
-persistence error and still does not call the destination.
+If refusal persistence is disabled or cannot be verified, the fence raises (a
+persistence error, or the underlying SQLite error when the write itself fails)
+and still does not call the destination.
 
 ## Runtime opt-in
 
@@ -51,6 +58,17 @@ is an error. Omitting both preserves the accepted default runtime path.
 The fence does not create, refresh or reinterpret an institutional grant. The
 existing Control Plane decision and effect identity remain authoritative for
 permission; the generation fence is an additional local supersession guard.
+
+## Scope of the fence
+
+The fence wraps `commit()` only; any other destination method is forwarded
+unchanged, and `commit()` takes no operation id. `run_exchange` uses the
+route-A destination, so an atomic destination (`execute_claim_atomic`) or the
+operation-identity profile is not supported behind the fence. `generation` is
+documented as a non-negative integer; the fence and `run_exchange` currently
+also accept a float with an integral value (`5.0` matches head 5), and
+`run_exchange` truncates a non-integral float with `int()`. Callers should pass
+an `int`.
 
 ## F5b effective-grant arguments
 

@@ -54,7 +54,7 @@ A valid signature, chain inclusion, message receipt, reasoning instruction or ev
 Suppose a synthetic refund conversation has an authoritative local lineage head **generation 5**, while a delayed worker still claims **generation 4**.
 
 1. The optional `LineageGenerationFence` reads the authoritative local generation from the same SQLite lineage store under its local commit lock.
-2. The version-4 effect is **refused before local commit** as `superseded_lineage_generation`. A minimal record binds the claimed effect, expected and authoritative generations, and refusal reason; ordinary refusal logs do not need the raw payload.
+2. The version-4 effect is **refused before local commit** as `superseded_lineage_generation`; the typed reason is retained in the fence's refusal record. Under the runtime revision the current profile pins, the executor result for this refusal shows only the error class name `GenerationFenceRefusal` (`status` failed), not the typed reason. A minimal record binds the claimed effect, expected and authoritative generations, and refusal reason; ordinary refusal logs do not need the raw payload.
 3. The persisted refusal counter survives restart. Once the configured record limit is reached, later refusals increment bounded suppression counters instead of expanding individual logs indefinitely.
 4. A generation-5 claim may proceed to its **synthetic local destination** only if independently supplied institutional authorization and other execution prerequisites are satisfied. Matching a lineage generation does **not** grant those permissions.
 

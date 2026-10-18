@@ -33,8 +33,8 @@ class GenerationFenceClaim:
             raise ValueError("conversation_id is required")
         if not self.effect_id:
             raise ValueError("effect_id is required")
-        # Only booleans and negative values are refused here; a float with an integral value is accepted (documented in generation-fence.md).
-        if isinstance(self.generation, bool) or self.generation < 0:
+        # Only a plain int is accepted: no bool, float (integral or not) or int subclass.
+        if type(self.generation) is not int or self.generation < 0:
             raise ValueError("generation must be a non-negative integer")
 
 

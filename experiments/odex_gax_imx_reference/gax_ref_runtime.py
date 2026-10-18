@@ -120,10 +120,12 @@ def _workflow_options(runtime_authority_profile, allow_test_time=False):
 
 
 def _executed_file_problems(executed: list[Path]) -> list[str]:
-    """Problems that make an executed file differ from the revision's blob, whatever ``git status`` says.
+    """Problems that make a verified entry file differ from the revision's blob, whatever ``git status`` says.
 
     ``git status`` trusts the index: a tracked file marked assume-unchanged or skip-worktree can be modified and still look
-    clean. Each executed file is therefore (1) refused if its index entry carries either flag (``git ls-files -v`` shows
+    clean. This step covers only the import chain of the verified entry modules (their package ``__init__.py`` files and
+    the module itself); ``_checkout_source_problems`` is the separate step that covers every tracked file of each checked
+    checkout. Each file in the chain is therefore (1) refused if its index entry carries either flag (``git ls-files -v`` shows
     lowercase for assume-unchanged and ``S`` for skip-worktree) and (2) hashed from disk (``git hash-object``) and compared
     with the blob recorded at HEAD.
     """

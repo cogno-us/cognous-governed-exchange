@@ -19,6 +19,6 @@ The new profile has the same behaviour as `security-runtime-candidate-20261016`:
 
 The in-process Git check remains a provenance-consistency check, not a trust boundary. The qualification harness selects this generation by setting `GAX_RUNTIME_COMPATIBILITY_PROFILE=security-runtime-f5b-20261016`. Cross-component cases and results belong to `cognous-stack-qualification/suites/security-runtime`.
 
-The transport adapter limitation described in `experiments/governed_message_transport/profile.md` applies to this profile as well.
+The transport adapter limitation described in `experiments/governed_message_transport/profile.md` applies to this profile as well, and to the later `security-runtime-p4-20261017` and `security-runtime-p2-20261018` profiles.
 
 Changes candidate component revision; requires F3 requalification, refreeze and re-review before acceptance. No release or production authorization. C0 and deployment limits remain.

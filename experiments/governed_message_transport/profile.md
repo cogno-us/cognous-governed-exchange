@@ -38,7 +38,7 @@ The `AcceptedGaxRecipientAdapter` calls the accepted GAX assessment interface. O
 
 External effects, if any, remain behind the pinned Control Plane and constrained executor. The transport layer has no direct effect-dispatch path.
 
-Limitation (F5b): `AcceptedGaxRecipientAdapter.handle`, `recover` and `resume_original` do not pass `runtime_authority_profile` to `run_exchange` or `resume_original_exchange`. Under `security-runtime-candidate-20261016` and `security-runtime-f5b-20261016` those calls fail before opening the exchange store, so the transport adapters are unusable under the V1 security profile. They remain usable only with the historical profiles.
+Limitation (F5b): `AcceptedGaxRecipientAdapter.handle`, `recover` and `resume_original` do not pass `runtime_authority_profile` to `run_exchange` or `resume_original_exchange`. Under every `security-runtime-*` profile (`security-runtime-candidate-20261016`, `security-runtime-f5b-20261016`, `security-runtime-p4-20261017` and `security-runtime-p2-20261018`) those calls fail before opening the exchange store, so the transport adapters are unusable under the V1 security profile. They remain usable only with the historical profiles.
 
 ## Durable delivery semantics
 

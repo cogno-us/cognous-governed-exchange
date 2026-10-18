@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## Programme 2 compatibility profile security-runtime-p2-20261018 (18 October 2026)
+
+- Added the runtime compatibility profile `security-runtime-p2-20261018` beside `security-runtime-p4-20261017` and `security-runtime-f5b-20261016` (both unchanged, so retained evidence stays reproducible): Control Plane `3cd17ead`, runtime `11de097c`, Manifest `2c36bcd0` (unchanged), Replay `46e8bd7c`, ODES `0663d5a2` and Evidence Pack `4fbbd344`. Strict source verification compares the checkouts to these constants exactly as for the other profiles; no identity check was loosened. Alpha scaffolding, removed with the other hard pins at end-of-alpha (P5).
+
 ## P4 compatibility profile security-runtime-p4-20261017 (17 October 2026)
 
 - Added the runtime compatibility profile `security-runtime-p4-20261017` beside `security-runtime-f5b-20261016` (kept, so retained evidence stays reproducible): Control Plane `26a7e659`, runtime `3024ef6e`, Manifest `2c36bcd0`, Replay `9aab3f6c` (step B), ODES `c5f4e2d0` and Evidence Pack `54df6984`. Strict source verification compares the checkouts to these constants as for the other profiles. Alpha scaffolding (qualification P4 of cogno-us/cognous-control-plane#38), removed with the other hard pins at end-of-alpha (P5).

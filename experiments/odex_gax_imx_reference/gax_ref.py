@@ -240,8 +240,9 @@ def assess_message(message: dict[str, Any], bundle: dict[str, Any], registry: Lo
     if not message_id_is_safe(message["message_id"]): return fail("structure", "GAX-SCHEMA-MESSAGE-ID-UNSAFE", "NOT_UNDERSTOOD")
     if message["message_digest"] != digest({k: v for k, v in message.items() if k != "message_digest"}) or message["content_digest"] != digest(message["content"]): return fail("structure", "GAX-INTEGRITY-DIGEST", "NOT_UNDERSTOOD")
     try:
-        if not isinstance(message["created_at"], str): raise ValueError("created_at must be a string")
-        parse_time(message["created_at"])
+        for member in ("created_at", "expires_at"):
+            if not isinstance(message[member], str): raise ValueError(member + " must be a string")
+            parse_time(message[member])
     except (TypeError, ValueError, AttributeError): return fail("structure", "GAX-SCHEMA-MISSING-REQUIRED", "NOT_UNDERSTOOD")
     stages["structure"] = "passed"
     if message["profile"] != PROFILE or message["protocol_version"] != PROTOCOL_VERSION or message["message_type"] not in SUPPORTED_TYPES: return fail("profile", "GAX-PROFILE-UNSUPPORTED-OR-DOWNGRADE", "NOT_UNDERSTOOD")

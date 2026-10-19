@@ -21,4 +21,4 @@ The qualification checks actual Git heads and exercises destination state, durab
 
 Local results: artifacts/recovery 42 passed; transport/redelivery 64 passed. Dedicated Linux Python 3.11/3.12 CI runs the two batches separately, with a 150-second process limit, three-minute test-step limit and ten-minute job limit. Exact published-head CI is recorded in the PR. Historical CI continues against its existing dependencies.
 
-This is the legacy bounded execution path in the newer implementation. It does not activate the atomic authority/effect profile or refund-intent registry, combine their guarantees, authenticate transport identities, establish external truth, or demonstrate production readiness. Hub `component-lock.json` remains unchanged. The next release gate is qualification in the hub against the accepted Governed Exchange merge, then an explicit lock advancement.
+This is the legacy bounded execution path in the newer implementation. It does not activate the atomic authority/effect profile or refund-intent registry, combine their guarantees, authenticate transport identities, establish external truth, or demonstrate production readiness.

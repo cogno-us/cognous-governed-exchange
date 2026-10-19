@@ -1,3 +1,7 @@
+## Programme 2 source tuple moved to current mains (19 October 2026)
+
+- Experimental exchange, no behaviour change. The Programme 2 compatibility profile `security-runtime-p2-20261018` keeps its name and now selects the current mains: control plane `2bac7875`, runtime `c4a05883`, manifest `ff549082`, Replay `2a7963b1`, ODES `4bf12128`, evidence pack `80e24650` (was `6093aca7` / `62a5cc15` / `f9ae8527` / `c8e665bd` / `bff8307c` / `cde3f1f1`). The strict source check still compares each checkout's Git HEAD to these strings exactly. P4, F5b and the earlier profiles are unchanged.
+
 ## Generation type check (19 October 2026)
 
 - Experimental exchange, no contract change and no pin change. Input validation: the lineage generation must be a plain `int` (at least 0). The fence claim refuses a float (integral or not), a `bool` or an `int` subclass, and `run_exchange` returns `lineage_generation_invalid` before recording the message instead of truncating with `int()`. Valid integer generations behave as before.

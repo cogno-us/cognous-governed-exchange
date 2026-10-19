@@ -89,12 +89,12 @@ elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-p2-20261018":
     # Programme 2 generation (qualification p2): the producers after the Programme 2 hardening work. Added beside
     # P4 and F5b, which are kept unchanged so retained evidence stays reproducible. Alpha scaffolding, removed with
     # the other hard pins at end-of-alpha (P5).
-    CP_REVISION = "6093aca7b945698e89c0d8ac7c75306375e1a298"
-    MOLTBOT_REVISION = "62a5cc156ecb439b4103b757fd265f276bb30374"
-    MANIFEST_REVISION = "f9ae8527326c07e3177b5f003e626b23758be3d0"
-    REPLAY_REVISION = "c8e665bd1936e4da90f6a324b486a320934c4bff"
-    ODES_REVISION = "bff8307cc437d16e977be4d5ff389f1dd3bf7991"
-    EVIDENCE_PACK_REVISION = "cde3f1f1cf517d5663afb33ce88c123aae779757"
+    CP_REVISION = "2bac7875391cad0a431fa0d75208b7ade39743e3"
+    MOLTBOT_REVISION = "c4a05883266b815f39d97cbf2240406647985147"
+    MANIFEST_REVISION = "ff5490828b2bf7f6a976da209f3f533701855687"
+    REPLAY_REVISION = "2a7963b18d96eb2e9e4fdb1a09c7588cf5c0ef00"
+    ODES_REVISION = "4bf1212860f4d7c5d4f26758485f91402ffed426"
+    EVIDENCE_PACK_REVISION = "80e24650bb089d3a0cb9c0063c5b4bcc4a436123"
 elif RUNTIME_COMPATIBILITY_PROFILE != "persistence-v1":
     raise RuntimeError("unsupported GAX runtime compatibility profile")
 

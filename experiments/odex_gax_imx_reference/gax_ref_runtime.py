@@ -90,11 +90,11 @@ elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-p2-20261018":
     # P4 and F5b, which are kept unchanged so retained evidence stays reproducible. Alpha scaffolding, removed with
     # the other hard pins at end-of-alpha (P5).
     CP_REVISION = "2bac7875391cad0a431fa0d75208b7ade39743e3"
-    MOLTBOT_REVISION = "c4a05883266b815f39d97cbf2240406647985147"
+    MOLTBOT_REVISION = "6b16962db140590b808f02b5c2cb11a217aec46f"
     MANIFEST_REVISION = "ff5490828b2bf7f6a976da209f3f533701855687"
-    REPLAY_REVISION = "2a7963b18d96eb2e9e4fdb1a09c7588cf5c0ef00"
-    ODES_REVISION = "4bf1212860f4d7c5d4f26758485f91402ffed426"
-    EVIDENCE_PACK_REVISION = "80e24650bb089d3a0cb9c0063c5b4bcc4a436123"
+    REPLAY_REVISION = "6a6a477495ac24e813f12bb0fe314acfe8bac9cf"
+    ODES_REVISION = "2893d935f1cb60d1854a3802cc32d739ddfd4efb"
+    EVIDENCE_PACK_REVISION = "fd030615a782a064b89c57e8e40d7f220f99ff9e"
 elif RUNTIME_COMPATIBILITY_PROFILE != "persistence-v1":
     raise RuntimeError("unsupported GAX runtime compatibility profile")
 

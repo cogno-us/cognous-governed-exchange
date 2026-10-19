@@ -202,9 +202,6 @@ class TrustedRouteTable:
     def verify_sender_endpoint(self, route: Route, sender_endpoint_ref: str) -> bool:
         return sender_endpoint_ref == route.sender_endpoint_ref
 
-    def verify_recipient_endpoint(self, route: Route, recipient_endpoint_ref: str) -> bool:
-        return recipient_endpoint_ref == route.recipient_endpoint_ref and route.local_endpoint
-
 
 @dataclass
 class RecipientOutcome:

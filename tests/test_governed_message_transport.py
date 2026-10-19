@@ -619,6 +619,8 @@ def test_multiple_valid_senders_share_recipient_without_first_route_bias(tmp_pat
     [
         ("sender_endpoint_ref", "local://sender-a"),
         ("sender_identity_ref", "urn:cognous:transport-identity:agent-a"),
+        ("recipient_endpoint_ref", "local://recipient-other"),
+        ("recipient_identity_ref", "urn:cognous:transport-identity:agent-other"),
     ],
 )
 def test_multi_sender_route_substitution_rejected(tmp_path, field, value):
@@ -642,6 +644,43 @@ def test_multi_sender_route_substitution_rejected(tmp_path, field, value):
     ack = t.receive_envelope(env, now=NOW)
     assert ack["acknowledgement_kind"] == ACK_KIND_TERMINAL_REJECTION
     assert ack["detail"]["reason"] == "untrusted_or_unknown_route_binding"
+    assert handler.call_count(item["message_id"]) == 0
+
+
+def test_non_local_recipient_route_rejected(tmp_path):
+    handler = DurableFixtureHandler(tmp_path / "effects.sqlite")
+    routes = TrustedRouteTable(
+        [
+            Route(
+                route_id="remote-recipient",
+                sender_endpoint_ref="local://sender-c",
+                sender_identity_ref="urn:cognous:transport-identity:agent-c",
+                expected_sender_claim="agent-c",
+                recipient_endpoint_ref="local://recipient-b",
+                recipient_identity_ref="urn:cognous:transport-identity:agent-b",
+                expected_recipient_claim="agent-b",
+                configured_identity_authenticated=False,
+                local_endpoint=False,
+            )
+        ]
+    )
+    t = LocalDurableTransport(
+        sender_store_path=tmp_path / "sender.sqlite",
+        recipient_store_path=tmp_path / "recipient.sqlite",
+        routes=routes,
+        recipient_handler=handler,
+    )
+    item = message(message_id="non-local", sender="agent-c")
+    env = make_transport_envelope(
+        governed_message=item,
+        route=routes.resolve("remote-recipient"),
+        delivery_attempt_id="non-local-route",
+        correlation_id=None,
+        created_at=NOW,
+    )
+    ack = t.receive_envelope(env, now=NOW)
+    assert ack["acknowledgement_kind"] == ACK_KIND_TERMINAL_REJECTION
+    assert ack["detail"]["reason"] == "recipient_endpoint_not_local"
     assert handler.call_count(item["message_id"]) == 0
 
 

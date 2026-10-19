@@ -32,6 +32,8 @@ Routes are resolved only from explicit trusted local configuration. A caller-sup
 
 The local fixture treats configured endpoint identity as trusted configuration only. `configured_identity_authenticated=false` explicitly records that this is not cryptographic network authentication. Transport credentials and successful delivery never create an Alvorada grant or Control Plane authorization.
 
+The recipient endpoint is verified at inbound route resolution: the complete configured binding, including the recipient endpoint and identity references, must match one trusted route, and non-local routes are rejected. There is no separate recipient-endpoint predicate.
+
 ## Recipient handling
 
 The `AcceptedGaxRecipientAdapter` calls the accepted GAX assessment interface. Only `PROPOSE` and `REQUEST` may continue from assessment into the accepted GAX `run_exchange` path. `REPORT`, `REFUSE`, and `NOT_UNDERSTOOD` remain informational and cannot trigger an effect through transport.

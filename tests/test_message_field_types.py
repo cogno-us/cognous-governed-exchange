@@ -101,3 +101,66 @@ def test_exchange_refuses_invalid_expires_at_before_any_record(tmp_path):
     assert result["assessment"]["permitted_handling"] == "NOT_UNDERSTOOD"
     assert result["execution"]["attempted"] is False
     assert runtime.TransactionalExchangeStore(store_path).seen_messages() == {}
+
+
+def _stub(monkeypatch):
+    class _P:
+        def model_dump(self, **_):
+            return {"action_id": "a", "target": None, "payload": None, "amount": None, "unit": None,
+                    "actor": None, "principal": None, "adapter_id": None, "requested_permissions": None,
+                    "authority_context_ref": base.PROFILE_AUTH_CONTEXT}
+    monkeypatch.setattr(base, "runtime_proposal_model", lambda bundle: _P())
+    monkeypatch.setattr(base, "proposal_commitment", lambda proposal=None, *, model=None: "sha256:" + "2" * 64)
+    monkeypatch.setattr(base, "operation_commitment", lambda proposal=None, *, model=None: "sha256:" + "1" * 64)
+
+
+@pytest.fixture(autouse=True)
+def _stubbed_proposal(monkeypatch):
+    _stub(monkeypatch)
+
+
+@pytest.mark.parametrize("value", [["PROPOSE"], {"t": "PROPOSE"}, 5, None])
+def test_non_string_message_type_is_not_understood_with_existing_code(value):
+    out = base.assess_message(signed(message_type=value), {}, registry(), evaluation_time=EVAL)
+    assert out["permitted_handling"] == "NOT_UNDERSTOOD"
+    assert out["errors"] == ["GAX-PROFILE-UNSUPPORTED-OR-DOWNGRADE"]
+
+
+@pytest.mark.parametrize("member,value", [
+    ("authority_refs", 5), ("authority_refs", None), ("authority_refs", True), ("authority_refs", 1.5),
+    ("authority_refs", {"type": "authority_context"}), ("authority_refs", ["x"]), ("authority_refs", [5, None]),
+    ("evidence_refs", 5), ("evidence_refs", None), ("evidence_refs", True), ("evidence_refs", 1.5),
+    ("evidence_refs", {"type": "replay_bundle"}),
+])
+def test_malformed_reference_lists_are_not_understood_with_existing_code(member, value):
+    out = base.assess_message(signed(**{member: value}), {}, registry(), evaluation_time=EVAL)
+    assert out["permitted_handling"] == "NOT_UNDERSTOOD"
+    assert out["errors"] == ["GAX-SCHEMA-MISSING-REQUIRED"]
+
+
+def test_well_formed_reference_lists_remain_accepted(monkeypatch):
+    _stub(monkeypatch)
+    out = base.assess_message(signed(), {}, registry(), evaluation_time=EVAL)
+    assert out["permitted_handling"] == "ACCEPT_FOR_ASSESSMENT"
+
+
+@pytest.mark.parametrize("value", [["m-1"], {"id": "m-1"}, 5, None])
+def test_exchange_non_string_message_id_is_refused_before_any_record(tmp_path, value):
+    store_path = tmp_path / "exchange.sqlite"
+    result = runtime.run_exchange(signed(message_id=value), {}, registry(), None, evaluation_time=EVAL,
+                                  manifest={}, store_path=store_path)
+    assert result["assessment"]["permitted_handling"] == "NOT_UNDERSTOOD"
+    assert result["assessment"]["errors"] == ["GAX-SCHEMA-MESSAGE-ID-UNSAFE"]
+    assert result["execution"]["attempted"] is False
+    assert runtime.TransactionalExchangeStore(store_path).seen_messages() == {}
+
+
+@pytest.mark.parametrize("change", [{"message_type": ["PROPOSE"]}, {"authority_refs": 5}, {"authority_refs": {"a": 1}},
+                                    {"evidence_refs": None}])
+def test_exchange_refuses_malformed_members_before_any_record(tmp_path, change):
+    store_path = tmp_path / "exchange.sqlite"
+    result = runtime.run_exchange(signed(**change), {}, registry(), None, evaluation_time=EVAL,
+                                  manifest={}, store_path=store_path)
+    assert result["assessment"]["permitted_handling"] == "NOT_UNDERSTOOD"
+    assert result["execution"]["attempted"] is False
+    assert runtime.TransactionalExchangeStore(store_path).seen_messages() == {}

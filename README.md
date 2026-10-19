@@ -19,7 +19,7 @@ Cross-component test commands below now run in a disposable checkout assembled b
 
 **Governed exchange and continuity for a bounded synthetic workflow.**
 
-**Status:** selected, as lock entry `gax_imx_transport` (GAX retained artifacts 1.1.0; `merged-producers-v1` opt-in compatibility). Experimental reference; deployment trust remains [HOLD](https://github.com/cogno-us/cognous-stack-orchestrator/issues/30). **Stack role:** cross-cutting exchange, connecting the five hub groups through governed messages, recipient assessment and continuity. See [where it fits](#cognous-stack-components) and the hub [stack map](https://github.com/cogno-us/cognous-open-control-stack/blob/main/docs/stack-map.md). Display name "Governed Exchange (GAX/IMX)"; Python package `alvorada-gax-imx-reference`, import package `experiments` (the former repository name was `alvorada`; see [naming](https://github.com/cogno-us/cognous-open-control-stack/blob/main/docs/naming.md)).
+**Status:** selected, as lock entry `gax_imx_transport` (GAX retained artifacts 1.1.0; the runtime profile `security-runtime-p2-20261018` is the profile whose constants match the P2 tuple). Experimental reference; deployment trust remains [HOLD](https://github.com/cogno-us/cognous-stack-orchestrator/issues/30). **Stack role:** cross-cutting exchange, connecting the hub groups through governed messages, recipient assessment and continuity. See [where it fits](#cognous-stack-components) and the hub [stack map](https://github.com/cogno-us/cognous-open-control-stack/blob/main/docs/stack-map.md). Display name "Governed Exchange (GAX/IMX)"; Python package `alvorada-gax-imx-reference`, import package `experiments` (the former repository name was `alvorada`; see [naming](https://github.com/cogno-us/cognous-open-control-stack/blob/main/docs/naming.md)).
 
 Status labels used on this page: **merged**, **selected**, **known limit**, **proposed** (defined in the hub [stack map](https://github.com/cogno-us/cognous-open-control-stack/blob/main/docs/stack-map.md#status-labels)).
 
@@ -48,16 +48,7 @@ python -m pytest -q tests/test_generation_fence.py tests/test_generation_type_ch
 python -m pytest -q tests                                                                 # full local suite, about 6 minutes
 ```
 
-Expected output of the quick check, and the last line of the full run:
-
-```text
-27 passed in 3.44s
-252 passed in 372.18s (0:06:12)
-```
-
-<!-- pin-round: refresh the two counts above if the tests change -->
-
-The elapsed time varies. A passing local run does not show compatibility with a Control Plane or runtime revision, effect-producing behavior or deployment readiness; that evidence is in the qualification repository (see [compatibility](#compatibility-and-selection)).
+Expected result: the quick check and the full run each end with a pytest summary line that reports passed tests and no failures. The counts and the elapsed time vary with the test set and the machine. A passing local run does not show compatibility with a Control Plane or runtime revision, effect-producing behavior or deployment readiness; that evidence is in the qualification repository (see [compatibility](#compatibility-and-selection)).
 
 ## What ships
 
@@ -72,9 +63,9 @@ The elapsed time varies. A passing local run does not show compatibility with a 
 | IMX successor packets | same module (`make_successor_packet`, `load_successor_packet`) | Preserve predecessor identity and commitment; loading a successor creates no effect. | default | selected (experimental) |
 | Governed message transport, profile `urn:cognous:profiles:governed-message-transport:0.1.0` | [profile](experiments/governed_message_transport/profile.md), [mapping](experiments/governed_message_transport/mapping.md), [transport.py](experiments/governed_message_transport/transport.py) | `LocalDurableTransport`, `AcceptedGaxRecipientAdapter`, `TransportStore`, `TrustedRouteTable` and `DeliveryClockPolicy`: queue, deliver and redeliver messages while retaining recipient outcomes. | default | selected (experimental) |
 | Lineage-generation fence, profile `urn:cognous:profiles:gax-lineage-generation-fence` 0.1.0 | [generation-fence.md](docs/generation-fence.md), [generation_fence.py](experiments/odex_gax_imx_reference/generation_fence.py) | `LineageGenerationFence`: refuses a stale effect claim before the local commit. The generation must be a plain `int`; anything else is refused as `lineage_generation_invalid`. | optional (not enabled by the hub) | merged |
-| Typed refusal provenance, `typed-refusal-candidate-20261015` | [typed-refusal-profile.md](docs/typed-refusal-profile.md) | Explicit opt-in profile that verifies loaded component sources before use. | optional | merged (candidate, not selected) |
-| Merged producers, `merged-producers-v1` | [merged-consumer-chain.md](docs/merged-consumer-chain.md) | Opt-in profile qualified against the accepted newer Control Plane, runtime, Replay, Evidence Pack and ODES revisions. | optional | selected (opt-in compatibility) |
-| Repaired runtime profiles: `security-runtime-candidate-20261016`, `security-runtime-f5b-20261016`, `security-runtime-p4-20261017`, `security-runtime-p2-20261018` | [candidate profile](docs/security-runtime-profile-20261016.md), [F5b profile](docs/security-runtime-f5b-profile-20261016.md); the P4 and P2 profiles are described in [CHANGELOG.md](CHANGELOG.md) | Separate opt-in profiles with exact revisions; sources are verified before use and the trusted caller must supply a runtime authority profile. Older profiles are kept so retained evidence stays reproducible. | optional | merged (not selected) |
+| Typed refusal provenance, `typed-refusal-candidate-20261015` | [typed-refusal-profile.md](docs/typed-refusal-profile.md) | Explicit opt-in profile that verifies loaded component sources before use. | optional | merged (candidate, opt-in) |
+| Merged producers, `merged-producers-v1` | [merged-consumer-chain.md](docs/merged-consumer-chain.md) | Opt-in profile qualified against an earlier set of newer Control Plane, runtime, Replay, Evidence Pack and ODES revisions; kept as a historical compatibility profile. | optional | merged (historical, opt-in) |
+| Repaired runtime profiles: `security-runtime-candidate-20261016`, `security-runtime-f5b-20261016`, `security-runtime-p4-20261017`, `security-runtime-p2-20261018` | [candidate profile](docs/security-runtime-profile-20261016.md), [F5b profile](docs/security-runtime-f5b-profile-20261016.md); the P4 and P2 profiles are described in [CHANGELOG.md](CHANGELOG.md) | Separate opt-in profiles with exact revisions; sources are verified before use and the trusted caller must supply a runtime authority profile. Older profiles are kept so retained evidence stays reproducible. `security-runtime-p2-20261018` is the profile whose revision constants match the P2 tuple recorded in the hub lock; the others are historical. | optional | merged (opt-in; P2 matches the lock tuple) |
 | Historical default `persistence-v1` and `gax_ref.py` | [gax_ref.py](experiments/odex_gax_imx_reference/gax_ref.py) | Historical default selector and module. `gax_ref.load_successor_packet` and `gax_ref.TransactionalExchangeStore` are unsupported; use `gax_ref_runtime`. | default (historical) | known limit |
 | Synthetic fixtures and demo | [synthetic_fixture.py](experiments/odex_gax_imx_reference/synthetic_fixture.py), [demo.py](experiments/odex_gax_imx_reference/demo.py) | Synthetic resolver, policy and clock; the demo writes one illustrative JSON file and needs the `upstream/` checkouts described above. | optional | known limit (needs checkouts) |
 
@@ -115,7 +106,7 @@ Overviews: the [business overview](collateral/business-collateral.md) and [one-p
 
 ## Compatibility and selection
 
-The [current hub component lock](https://github.com/cogno-us/cognous-open-control-stack/blob/main/component-lock.json) defines the selected revision (`gax_imx_transport`); optional generation-fence source is not automatically selected or enabled by the hub. Interfaces: bounded refund exchange 0.1.0, retained artifacts 1.1.0 and recipient result 1.0.0. The public runtime uses supported executor interfaces, not upstream test helpers. Authority Context comes from [the separate Institutional Governance repository](https://github.com/cogno-us/cognous-institutional-governance). <!-- pin-round: refresh when the lock pin for gax_imx_transport moves; main is ahead of the pin -->
+The [current hub component lock](https://github.com/cogno-us/cognous-open-control-stack/blob/main/component-lock.json) defines the selected revision (`gax_imx_transport`); optional generation-fence source is not automatically selected or enabled by the hub. Interfaces: bounded refund exchange 0.1.0, retained artifacts 1.1.0 and recipient result 1.0.0. The public runtime uses supported executor interfaces, not upstream test helpers. Authority Context comes from [the separate Institutional Governance repository](https://github.com/cogno-us/cognous-institutional-governance).
 
 Test results, run commentary and historical qualification records are in the [central test hub](https://github.com/cogno-us/cognous-stack-qualification/blob/main/results/readme-commentary/index.md). Read them against their recorded source revisions; source selection and deployment approval are separate decisions.
 
@@ -150,7 +141,7 @@ See the [research bibliography](https://github.com/cogno-us/cognous-open-control
 
 <!-- stack-map:start -->
 <!-- Canonical block: identical text in every component README. Source: docs/stack-map.md in the hub. Refresh at the pin round. -->
-The Open Control Stack groups its repositories by responsibility. The groups are a navigation map, not an execution sequence and not a requirement to install every component. The hub [component lock](https://github.com/cogno-us/cognous-open-control-stack/blob/main/component-lock.json) is the only source of selected revisions; [release status](https://github.com/cogno-us/cognous-open-control-stack/blob/main/docs/release-status.md) states their evidence and limits. Last checked against `component-lock.json` at hub commit `dcc9bd7533ef`.
+The Open Control Stack groups its repositories by responsibility. The groups are a navigation map, not an execution sequence and not a requirement to install every component. The hub [component lock](https://github.com/cogno-us/cognous-open-control-stack/blob/main/component-lock.json) is the only source of selected revisions; [release status](https://github.com/cogno-us/cognous-open-control-stack/blob/main/docs/release-status.md) states their evidence and limits. The component revisions selected for the stack are listed in the hub's `component-lock.json`; this repository does not record which hub commit it was last checked against.
 
 | Group | Members |
 | --- | --- |
@@ -173,7 +164,7 @@ See the [repository rename map and compatibility notes](https://github.com/cogno
 
 ## Merged producer and consumer compatibility
 
-An explicit `merged-producers-v1` profile selects the accepted newer Control Plane, execution runtime, Replay, Evidence Pack and ODES revisions. The historical profile remains the default. See [exact revisions, qualification and limits](docs/merged-consumer-chain.md). This profile does not enable atomic-claim or refund-intent execution.
+An explicit `merged-producers-v1` profile selects an earlier set of newer Control Plane, execution runtime, Replay, Evidence Pack and ODES revisions, and is kept as a historical compatibility profile. The runtime profile `security-runtime-p2-20261018` is the one whose constants match the P2 tuple in the hub lock. The default profile remains `persistence-v1`. See [exact revisions, qualification and limits](docs/merged-consumer-chain.md). This profile does not enable atomic-claim or refund-intent execution.
 
 ## Cross component qualification
 

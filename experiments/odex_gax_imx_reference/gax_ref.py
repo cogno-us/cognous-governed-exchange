@@ -244,8 +244,9 @@ def assess_message(message: dict[str, Any], bundle: dict[str, Any], registry: Lo
             if not isinstance(message[member], str): raise ValueError(member + " must be a string")
             parse_time(message[member])
     except (TypeError, ValueError, AttributeError): return fail("structure", "GAX-SCHEMA-MISSING-REQUIRED", "NOT_UNDERSTOOD")
+    if not isinstance(message["authority_refs"], list) or not all(isinstance(r, dict) for r in message["authority_refs"]) or not isinstance(message["evidence_refs"], list): return fail("structure", "GAX-SCHEMA-MISSING-REQUIRED", "NOT_UNDERSTOOD")
     stages["structure"] = "passed"
-    if message["profile"] != PROFILE or message["protocol_version"] != PROTOCOL_VERSION or message["message_type"] not in SUPPORTED_TYPES: return fail("profile", "GAX-PROFILE-UNSUPPORTED-OR-DOWNGRADE", "NOT_UNDERSTOOD")
+    if message["profile"] != PROFILE or message["protocol_version"] != PROTOCOL_VERSION or not isinstance(message["message_type"], str) or message["message_type"] not in SUPPORTED_TYPES: return fail("profile", "GAX-PROFILE-UNSUPPORTED-OR-DOWNGRADE", "NOT_UNDERSTOOD")
     stages["profile"] = "passed"; prior = (seen_messages or {}).get(message["message_id"])
     if prior and prior != message["message_digest"]: return fail("identity_binding", "GAX-INTEGRITY-MESSAGE-ID-REUSE")
     if not isinstance(message["sender"], str) or not registry.sender_trusted(message["sender"]): return fail("identity_binding", "GAX-IDENTITY-SENDER-UNTRUSTED")

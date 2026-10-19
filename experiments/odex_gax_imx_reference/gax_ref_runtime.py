@@ -1014,7 +1014,8 @@ def run_exchange(message: dict[str, Any], bundle: dict[str, Any], registry: Loca
     # Look up the retained receipt without inserting: a message that is not
     # accepted must never reserve its message_id.
     seen_messages = store.seen_messages()
-    prior_digest = seen_messages.get(message.get("message_id"))
+    # A non-string message_id cannot be a retained key; assess_message refuses it as an unsafe identifier.
+    prior_digest = seen_messages.get(message.get("message_id")) if isinstance(message.get("message_id"), str) else None
     if prior_digest is not None and prior_digest != message.get("message_digest"):
         err = "GAX-INTEGRITY-MESSAGE-ID-REUSE"
         return {"assessment": {"permitted_handling": "REFUSE", "errors": [err], "stages": {"identity_binding": "failed"}}, "execution": {"attempted": False, "reason": err}, "successor_packet": None}

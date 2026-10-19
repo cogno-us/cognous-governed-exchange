@@ -85,3 +85,19 @@ def test_exchange_refuses_before_any_record_or_effect(tmp_path, change):
     assert result["assessment"]["permitted_handling"] in {"REFUSE", "NOT_UNDERSTOOD"}
     assert result["execution"]["attempted"] is False
     assert runtime.TransactionalExchangeStore(store_path).seen_messages() == {}
+
+
+@pytest.mark.parametrize("value", [5, 1.5, None, ["2026-08-09T00:00:00Z"], {}, "", "not-a-time", "2026-08-09T00:00:00"])
+def test_invalid_expires_at_is_not_understood_with_existing_code(value):
+    out = base.assess_message(signed(expires_at=value), {}, registry(), evaluation_time=EVAL)
+    assert out["permitted_handling"] == "NOT_UNDERSTOOD"
+    assert out["errors"] == ["GAX-SCHEMA-MISSING-REQUIRED"]
+
+
+def test_exchange_refuses_invalid_expires_at_before_any_record(tmp_path):
+    store_path = tmp_path / "exchange.sqlite"
+    result = runtime.run_exchange(signed(expires_at=5), {}, registry(), None, evaluation_time=EVAL,
+                                  manifest={}, store_path=store_path)
+    assert result["assessment"]["permitted_handling"] == "NOT_UNDERSTOOD"
+    assert result["execution"]["attempted"] is False
+    assert runtime.TransactionalExchangeStore(store_path).seen_messages() == {}

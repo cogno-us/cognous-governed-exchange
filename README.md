@@ -19,35 +19,66 @@ Cross-component test commands below now run in a disposable checkout assembled b
 
 **Governed exchange and continuity for a bounded synthetic workflow.**
 
-**Stack role: Cross-cutting exchange integration (GAX/IMX).** Connects the six responsibility groups through governed exchange and continuity.
+**Status:** selected, as lock entry `gax_imx_transport` (GAX retained artifacts 1.1.0; `merged-producers-v1` opt-in compatibility). Experimental reference; deployment trust remains [HOLD](https://github.com/cogno-us/cognous-stack-orchestrator/issues/30). **Stack role:** cross-cutting exchange, connecting the five hub groups through governed messages, recipient assessment and continuity. See [where it fits](#cognous-stack-components) and the hub [stack map](https://github.com/cogno-us/cognous-open-control-stack/blob/main/docs/stack-map.md). Display name "Governed Exchange (GAX/IMX)"; Python package `alvorada-gax-imx-reference`, import package `experiments` (the former repository name was `alvorada`; see [naming](https://github.com/cogno-us/cognous-open-control-stack/blob/main/docs/naming.md)).
 
-## Overview
+Status labels used on this page: **merged**, **selected**, **known limit**, **proposed** (defined in the hub [stack map](https://github.com/cogno-us/cognous-open-control-stack/blob/main/docs/stack-map.md#status-labels)).
 
-An experimental GAX/IMX reference that connects governed messages, recipient assessment, bounded execution and retained evidence. It is separate from the constitutional authority repository: this workbench implements exchange behavior and local transport, not an institution or a constitution.
+## What it is, who it is for, what it does not do
 
-**Implementation and selection:** the [current hub component lock](https://github.com/cogno-us/cognous-open-control-stack/blob/main/component-lock.json) defines the selected revision. Optional generation-fence source is not automatically selected or enabled by the hub. Deployment trust remains [HOLD](https://github.com/cogno-us/cognous-stack-orchestrator/issues/30).
-
-## Purpose and intended users
-
-Message receipt, understanding, acceptance, authorization and execution are different events. A recipient must preserve those distinctions when messages are duplicated, acknowledgements are lost or a workflow resumes under changed authority.
-
-Engineers can inspect the reference contracts and examples; enterprise architecture, security and governance reviewers can examine the boundary and evidence. Evaluate this component for its named responsibility rather than as a complete governance platform.
-
-## Key features
-
-| Capability | Implemented or specified responsibility |
-|---|---|
-| **GAX assessment** | Assess message structure, supported profile, identity binding, references, freshness and permitted handling. |
-| **Local durable transport** | Queue, deliver and redeliver messages while retaining their association with recipient outcomes. |
-| **Public runtime integration** | Invoke supported Control Plane and executor interfaces with caller-supplied resolver, execution policy, observation policy and trusted time. |
-| **Retained artifacts** | Expose original Replay, ODES and IMX artifacts with identities and content commitments. |
-| **Recovery and continuity** | Reconcile original effects, retain derivative lineage and preserve predecessor commitments without making successor loading an execution grant. |
+- **What it is.** An experimental GAX/IMX reference that connects governed messages, recipient assessment, bounded execution and retained evidence. It implements exchange behavior and a local durable transport for a bounded synthetic refund workflow.
+- **Who it is for.** Engineers who want to inspect the reference contracts, profiles and examples; enterprise architecture, security and governance reviewers who want to examine the boundary and evidence. Evaluate it for its named responsibility, not as a complete governance platform.
+- **What it does not do.** It is not an institution or a constitution (that is [Institutional Governance](https://github.com/cogno-us/cognous-institutional-governance)), not full GAX conformance, not a production network and not institutional authentication. Message receipt, understanding, acceptance, authorization and execution are different events; message ids and receipt do not authorize actions. A valid signature, chain inclusion, message receipt, reasoning instruction or evidence-package digest does not authorize execution. Institutional authority must be supplied and evaluated through the appropriate trusted boundary.
 
 ## How it works
 
 LocalDurableTransport delivers a synthetic refund message to AcceptedGaxRecipientAdapter. GAX assesses the message and routes the Manifest-bound proposal through the trusted runtime. Redelivery returns the retained original artifacts when available. If evidence was never retained after an effect, evidence-only recovery creates an explicitly derived record without issuing a replacement effect.
 
-A valid signature, chain inclusion, message receipt, reasoning instruction or evidence-package digest does not authorize execution. Institutional authority must be supplied and evaluated through the appropriate trusted boundary.
+## Quick start
+
+There is **no standalone quick start that produces output from a clean checkout**. The exchange demo and the compatibility profiles need checkouts of other components at exact revisions (a directory `upstream/` with the Control Plane and the Execution Runtime, plus the Manifest and Replay examples); without them the demo stops with a missing-file error or `RuntimeError: pinned upstream checkout is unavailable`. For the complete reproduction use the [hub developer quickstart](https://github.com/cogno-us/cognous-open-control-stack/blob/main/docs/quickstart.md) and the [qualification workflows](CROSS_COMPONENT_TESTS.md).
+
+What you can run from a clean checkout is the component-local test suite. It needs Python 3.11 or later, has no runtime dependencies and uses no network:
+
+```bash
+git clone https://github.com/cogno-us/cognous-governed-exchange
+cd cognous-governed-exchange
+python -m venv .venv && . .venv/bin/activate
+python -m pip install -e '.[dev]'
+python -m pytest -q tests/test_generation_fence.py tests/test_generation_type_check.py   # quick check, a few seconds
+python -m pytest -q tests                                                                 # full local suite, about 6 minutes
+```
+
+Expected output of the quick check, and the last line of the full run:
+
+```text
+27 passed in 3.44s
+252 passed in 372.18s (0:06:12)
+```
+
+<!-- pin-round: refresh the two counts above if the tests change -->
+
+The elapsed time varies. A passing local run does not show compatibility with a Control Plane or runtime revision, effect-producing behavior or deployment readiness; that evidence is in the qualification repository (see [compatibility](#compatibility-and-selection)).
+
+## What ships
+
+| Item | Where | Purpose | Default or optional | Label |
+|---|---|---|---|---|
+| Refund exchange profile `urn:cognous:profiles:odex-gax-imx-refund-exchange:0.1.0` | [profile](experiments/odex_gax_imx_reference/profile.md), [mapping](experiments/odex_gax_imx_reference/mapping.md), [reference README](experiments/odex_gax_imx_reference/README.md) | Experimental implementation profile for a bounded synthetic refund exchange. | default | selected (experimental) |
+| Message types | `PROPOSE`, `REQUEST`, `REPORT`, `REFUSE`, `NOT_UNDERSTOOD` | The implemented message types of the profile. | default | selected (experimental) |
+| Recipient assessment stages | [gax_ref_runtime.py](experiments/odex_gax_imx_reference/gax_ref_runtime.py) | Structure, supported profile, identity binding through a local trusted registry, reference resolution, authority assessment from retained Control Plane decision facts, freshness and expiry, permitted handling. | default | selected (experimental) |
+| Transactional runtime | `run_exchange`, `resume_original_exchange`, `TransactionalExchangeStore` in [gax_ref_runtime.py](experiments/odex_gax_imx_reference/gax_ref_runtime.py) | Supported runtime path: runs an exchange through the public Execution Runtime and Control Plane interfaces and persists checkpoints and outcomes. | default | selected |
+| Processing lease and insert-once writes | same module | A second holder for the same message is held with `message_processing_lease_held`; checkpoints, workflow and artifact-export rows are insert-once. | default | merged |
+| Retained artifacts, profile `urn:cognous:profiles:gax-retained-artifacts` 1.1.0 | [runtime and artifact interface](docs/gax-runtime-artifact-interface.md) | Original Replay, ODES and exchange artifacts exposed with identities and content commitments. | default | selected |
+| IMX successor packets | same module (`make_successor_packet`, `load_successor_packet`) | Preserve predecessor identity and commitment; loading a successor creates no effect. | default | selected (experimental) |
+| Governed message transport, profile `urn:cognous:profiles:governed-message-transport:0.1.0` | [profile](experiments/governed_message_transport/profile.md), [mapping](experiments/governed_message_transport/mapping.md), [transport.py](experiments/governed_message_transport/transport.py) | `LocalDurableTransport`, `AcceptedGaxRecipientAdapter`, `TransportStore`, `TrustedRouteTable` and `DeliveryClockPolicy`: queue, deliver and redeliver messages while retaining recipient outcomes. | default | selected (experimental) |
+| Lineage-generation fence, profile `urn:cognous:profiles:gax-lineage-generation-fence` 0.1.0 | [generation-fence.md](docs/generation-fence.md), [generation_fence.py](experiments/odex_gax_imx_reference/generation_fence.py) | `LineageGenerationFence`: refuses a stale effect claim before the local commit. The generation must be a plain `int`; anything else is refused as `lineage_generation_invalid`. | optional (not enabled by the hub) | merged |
+| Typed refusal provenance, `typed-refusal-candidate-20261015` | [typed-refusal-profile.md](docs/typed-refusal-profile.md) | Explicit opt-in profile that verifies loaded component sources before use. | optional | merged (candidate, not selected) |
+| Merged producers, `merged-producers-v1` | [merged-consumer-chain.md](docs/merged-consumer-chain.md) | Opt-in profile qualified against the accepted newer Control Plane, runtime, Replay, Evidence Pack and ODES revisions. | optional | selected (opt-in compatibility) |
+| Repaired runtime profiles: `security-runtime-candidate-20261016`, `security-runtime-f5b-20261016`, `security-runtime-p4-20261017`, `security-runtime-p2-20261018` | [candidate profile](docs/security-runtime-profile-20261016.md), [F5b profile](docs/security-runtime-f5b-profile-20261016.md); the P4 and P2 profiles are described in [CHANGELOG.md](CHANGELOG.md) | Separate opt-in profiles with exact revisions; sources are verified before use and the trusted caller must supply a runtime authority profile. Older profiles are kept so retained evidence stays reproducible. | optional | merged (not selected) |
+| Historical default `persistence-v1` and `gax_ref.py` | [gax_ref.py](experiments/odex_gax_imx_reference/gax_ref.py) | Historical default selector and module. `gax_ref.load_successor_packet` and `gax_ref.TransactionalExchangeStore` are unsupported; use `gax_ref_runtime`. | default (historical) | known limit |
+| Synthetic fixtures and demo | [synthetic_fixture.py](experiments/odex_gax_imx_reference/synthetic_fixture.py), [demo.py](experiments/odex_gax_imx_reference/demo.py) | Synthetic resolver, policy and clock; the demo writes one illustrative JSON file and needs the `upstream/` checkouts described above. | optional | known limit (needs checkouts) |
+
+Profiles are selected by setting `GAX_RUNTIME_COMPATIBILITY_PROFILE` before importing the runtime; an unknown name fails at import. The selector is a compatibility contract, not an authorization input or an identity attestation. The P4 and P2 profiles are alpha scaffolding that is removed together with the other hard pins at the end of the alpha stage.
 
 ## Example: two generations and a late result
 
@@ -60,32 +91,42 @@ Suppose a synthetic refund conversation has an authoritative local lineage head 
 
 The accepted source implementation is [`generation_fence.py`](experiments/odex_gax_imx_reference/generation_fence.py), with [source-owned negative tests](tests/test_generation_fence.py). The [O6-Q4 orchestration qualification](https://github.com/cogno-us/cognous-stack-orchestrator/blob/main/development/acceptance/o6-q4/README.md) exercises it alongside actual pinned synthetic Control Plane and Runtime interfaces, but does not establish distributed atomicity or production settlement. A stale message receipt cannot authorize a replacement refund, and a timeout or observed absence never makes a blind retry safe.
 
-## Getting started
+## Documentation index
 
-For a complete environment with exact dependencies, follow the [hub developer quickstart](https://github.com/cogno-us/cognous-open-control-stack/blob/main/docs/quickstart.md). The [exchange demo](experiments/odex_gax_imx_reference/README.md) has separate prerequisites and writes an illustrative JSON artifact; it is not the transported, effect-producing qualification. Consult the [transport profile](experiments/governed_message_transport/profile.md) before treating receipt as any stronger state.
+Profiles and interfaces:
 
-## Scope and compatibility
+- [docs/gax-runtime-artifact-interface.md](docs/gax-runtime-artifact-interface.md): supported runtime boundary and retained-artifact interface.
+- [experiments/odex_gax_imx_reference/README.md](experiments/odex_gax_imx_reference/README.md), [profile.md](experiments/odex_gax_imx_reference/profile.md) and [mapping.md](experiments/odex_gax_imx_reference/mapping.md): exchange profile, field mapping and loss register.
+- [experiments/governed_message_transport/profile.md](experiments/governed_message_transport/profile.md) and [mapping.md](experiments/governed_message_transport/mapping.md): transport profile and handoff mapping.
+- [docs/generation-fence.md](docs/generation-fence.md): optional lineage-generation fence.
+- [docs/typed-refusal-profile.md](docs/typed-refusal-profile.md): typed refusal provenance candidate.
+- [docs/merged-consumer-chain.md](docs/merged-consumer-chain.md): merged-producers profile, exact revisions and limits.
+- [docs/security-runtime-profile-20261016.md](docs/security-runtime-profile-20261016.md) and [docs/security-runtime-f5b-profile-20261016.md](docs/security-runtime-f5b-profile-20261016.md): repaired runtime compatibility profiles.
 
-Use the [current component lock](https://github.com/cogno-us/cognous-open-control-stack/blob/main/component-lock.json) for the selected revision. bounded refund exchange 0.1.0, retained artifacts 1.1.0 and recipient result 1.0.0. The public runtime uses supported executor interfaces, not upstream test helpers. Authority Context comes from [the separate constitutional repository](https://github.com/cogno-us/cognous-institutional-governance).
+Checkpoints and history (each keeps the status and scope of the work it recorded):
 
-Test results, run commentary and historical qualification records are maintained in the [central test hub](https://github.com/cogno-us/cognous-stack-qualification/blob/main/results/readme-commentary/index.md). Read them against their recorded source revisions; source selection and deployment approval are separate decisions.
+- [docs/workstreams/gax-control-plane-store-adoption-checkpoint.md](docs/workstreams/gax-control-plane-store-adoption-checkpoint.md)
+- [docs/workstreams/gax-producer-v2-checkpoint.md](docs/workstreams/gax-producer-v2-checkpoint.md)
+- [docs/workstreams/recovery-export-separation-checkpoint.md](docs/workstreams/recovery-export-separation-checkpoint.md)
+- [docs/workstreams/gax-observation-repair-results.json](docs/workstreams/gax-observation-repair-results.json): retained results.
+- [CHANGELOG.md](CHANGELOG.md), [CROSS_COMPONENT_TESTS.md](CROSS_COMPONENT_TESTS.md)
 
-## Limitations and deployment decisions
+Overviews: the [business overview](collateral/business-collateral.md) and [one-page overview](collateral/one-page-overview.md) describe this component's role and evidence limits, not additional runtime features. Hub pages: [stack map](https://github.com/cogno-us/cognous-open-control-stack/blob/main/docs/stack-map.md), [profiles and tools](https://github.com/cogno-us/cognous-open-control-stack/blob/main/docs/profiles-and-tools.md), [documentation index](https://github.com/cogno-us/cognous-open-control-stack/blob/main/docs/README.md).
 
-This is a bounded refund profile, not full GAX conformance, a production network or institutional authentication. Message IDs and receipt do not authorize actions. Current recovery can be denied while historical applied evidence remains true. Deferred Alvorada PR #2 is excluded from the hub; no pending branch supplies supported behavior.
+## Compatibility and selection
 
-Review original artifacts and their exact source revisions before extending a claim to a new environment. New dependencies, authority sources, destinations or enforcement mechanisms need their own compatibility and qualification. A passing reference case is not a certification of an enterprise deployment.
+The [current hub component lock](https://github.com/cogno-us/cognous-open-control-stack/blob/main/component-lock.json) defines the selected revision (`gax_imx_transport`); optional generation-fence source is not automatically selected or enabled by the hub. Interfaces: bounded refund exchange 0.1.0, retained artifacts 1.1.0 and recipient result 1.0.0. The public runtime uses supported executor interfaces, not upstream test helpers. Authority Context comes from [the separate Institutional Governance repository](https://github.com/cogno-us/cognous-institutional-governance). <!-- pin-round: refresh when the lock pin for gax_imx_transport moves; main is ahead of the pin -->
 
-## Repository guide
+Test results, run commentary and historical qualification records are in the [central test hub](https://github.com/cogno-us/cognous-stack-qualification/blob/main/results/readme-commentary/index.md). Read them against their recorded source revisions; source selection and deployment approval are separate decisions.
 
-Use these sources for details; their historical checkpoints retain the status and scope of the work they recorded:
+## Limits
 
-- [docs/gax-runtime-artifact-interface.md](docs/gax-runtime-artifact-interface.md)
-- [experiments/odex_gax_imx_reference/profile.md](experiments/odex_gax_imx_reference/profile.md)
-- [experiments/governed_message_transport/profile.md](experiments/governed_message_transport/profile.md)
-- [experiments/odex_gax_imx_reference/mapping.md](experiments/odex_gax_imx_reference/mapping.md)
-
-For a nontechnical introduction, read the [business overview](collateral/business-collateral.md) and [one-page overview](collateral/one-page-overview.md). Both describe this component's role and evidence limits, not additional runtime features.
+- **Known limit:** this is a bounded refund profile, not full GAX conformance, a production network or institutional authentication.
+- **Known limit:** current recovery can be denied while historical applied evidence remains true. A crashed holder leaves its processing lease in place until an operator releases it, so a redelivery is held rather than dispatched twice.
+- **Known limit:** the first successor packet for a conversation has no stored head to check against; later packets are checked against the stored head. Loading a successor never creates an effect or grants authority.
+- **Known limit:** the fence is a same-store serialization property, not distributed destination atomicity or protection against a writer that bypasses the exchange store.
+- **Known limit:** deferred Alvorada PR #2 is excluded from the hub; no pending branch supplies supported behavior.
+- Review original artifacts and their exact source revisions before extending a claim to a new environment. New dependencies, authority sources, destinations or enforcement mechanisms need their own compatibility and qualification. A passing reference case is not a certification of an enterprise deployment. Shared stack-level claims are in the hub [guarantees and limits](https://github.com/cogno-us/cognous-open-control-stack/blob/main/docs/guarantees-and-limits.md).
 
 ## Contributing and attribution
 
@@ -107,31 +148,23 @@ See the [research bibliography](https://github.com/cogno-us/cognous-open-control
 
 ## Cognous stack components
 
-The six groups organize component responsibilities. They are not an execution
-sequence or a requirement to install every component. The [hub lock](https://github.com/cogno-us/cognous-open-control-stack/blob/main/component-lock.json)
-defines the selected integration; [release status](https://github.com/cogno-us/cognous-open-control-stack/blob/main/docs/release-status.md)
-defines its evidence and limits.
+The Open Control Stack organizes component responsibilities into five groups, one cross-cutting component and two side groups. The groups are a navigation map, not an execution sequence or a requirement to install every component. The [hub component lock](https://github.com/cogno-us/cognous-open-control-stack/blob/main/component-lock.json) defines the selected integration; [release status](https://github.com/cogno-us/cognous-open-control-stack/blob/main/docs/release-status.md) defines its evidence and limits. The [stack map](https://github.com/cogno-us/cognous-open-control-stack/blob/main/docs/stack-map.md) carries the full table with status labels (merged, selected, known limit, proposed); [naming](https://github.com/cogno-us/cognous-open-control-stack/blob/main/docs/naming.md) lists display names, packages and former names.
+
+<!-- stack-map-block: last checked against component-lock.json at hub commit dcc9bd7533ef; refresh at the pin round -->
+Last checked against the hub component lock at hub commit `dcc9bd7533ef`.
 
 | Group | Components |
 | --- | --- |
-| **01 · Knowledge & Provenance** | [The Index (Evidence Registry)](https://github.com/cogno-us/cognous-evidence-registry) · [BitRep (Evidence Attestation)](https://github.com/cogno-us/cognous-evidence-attestation) |
-| **02 · Institutional Governance** | [Alvorada (Institutional Governance)](https://github.com/cogno-us/cognous-institutional-governance) · authority contracts |
-| **03 · Declaration & Policy Control** | [Action Manifest](https://github.com/cogno-us/cognous-action-manifest) · [Control Plane](https://github.com/cogno-us/cognous-control-plane) |
-| **04 · Constrained Execution** | [Execution Runtime (Moltbot Safe)](https://github.com/cogno-us/cognous-execution-runtime) |
-| **05 · Replay & Evidence** | [Replay Bundle](https://github.com/cogno-us/cognous-replay-bundle) · [Governance Evidence Pack](https://github.com/cogno-us/cognous-governance-evidence-pack) · [ODES](https://github.com/cogno-us/open-decision-evidence-standard) |
-| **06 · Reasoning & Human Oversight** | [PRP](https://github.com/cogno-us/portable-reasoning-protocol) · [Research Intelligence](https://github.com/cogno-us/research-intelligence-protocol) · [TFA](https://github.com/cogno-us/truth-freedom-agency-protocol) |
+| **01 Knowledge & Provenance** | [Evidence Registry (The Index)](https://github.com/cogno-us/cognous-evidence-registry) · [Evidence Attestation (BitRep)](https://github.com/cogno-us/cognous-evidence-attestation) |
+| **02 Institutional Governance** | [Institutional Governance (Alvorada)](https://github.com/cogno-us/cognous-institutional-governance) |
+| **03 Declaration & Policy Control** | [Action Manifest](https://github.com/cogno-us/cognous-action-manifest) · [Control Plane](https://github.com/cogno-us/cognous-control-plane) |
+| **04 Constrained Execution** | [Execution Runtime](https://github.com/cogno-us/cognous-execution-runtime) |
+| **05 Replay & Evidence** | [Replay Bundle](https://github.com/cogno-us/cognous-replay-bundle) · [Governance Evidence Pack](https://github.com/cogno-us/cognous-governance-evidence-pack) · [ODES](https://github.com/cogno-us/open-decision-evidence-standard) |
+| **Cross-cutting exchange** | [Governed Exchange (GAX/IMX)](https://github.com/cogno-us/cognous-governed-exchange) |
+| **Optional reasoning protocols** (side group) | [PRP](https://github.com/cogno-us/portable-reasoning-protocol) · [Research Intelligence Protocol](https://github.com/cogno-us/research-intelligence-protocol) · [TFA Protocol](https://github.com/cogno-us/truth-freedom-agency-protocol) |
+| **Tooling and qualification** (side group) | [Ergonomics (`cognous-ocs`)](https://github.com/cogno-us/cognous-open-control-stack-ergonomics) · [Verifier](https://github.com/cogno-us/cognous-open-control-stack-verifier) · [Orchestrator](https://github.com/cogno-us/cognous-stack-orchestrator) · [Qualification](https://github.com/cogno-us/cognous-stack-qualification) |
 
-**Cross-cutting exchange:** [Governed Exchange (GAX/IMX)](https://github.com/cogno-us/cognous-governed-exchange) connects
-governed messages, recipient assessment and continuity across the groups. It is
-separate from Alvorada's institutional authority framework.
-
-Execution Runtime and Moltbot Safe name the same repository here. The supported
-Cognous Python execution boundary remains distinct from the retained upstream
-application. PRP, Research Intelligence and TFA are optional behavioral
-instructions; they do not enforce authorization or substitute for human oversight.
-A signature, registry entry, message receipt or evidence summary does not grant
-execution authority.
-
+The hub itself is [cognous-open-control-stack](https://github.com/cogno-us/cognous-open-control-stack). Governed Exchange is separate from Institutional Governance's authority framework. The optional reasoning protocols are behavioral instructions: they do not enforce authorization or substitute for human oversight. A signature, registry entry, message receipt or evidence summary does not grant execution authority.
 
 ## Repository locations
 

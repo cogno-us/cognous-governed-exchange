@@ -68,6 +68,8 @@ Continuity limits (F5b):
 
 ## Demo
 
+Prerequisite: the demo needs checkouts of the Control Plane (`upstream/control-plane`), the Execution Runtime (`upstream/moltbot-safe`), the Manifest (`upstream/manifest`) and Replay (`upstream/replay`) at the exact revisions of the selected compatibility profile (see [merged-consumer-chain](../../docs/merged-consumer-chain.md)). Without them it stops with a missing-file error or `RuntimeError: pinned upstream checkout is unavailable`. The component-local tests do not need these checkouts.
+
 ```bash
 python -m experiments.odex_gax_imx_reference.demo \
   --manifest upstream/manifest/examples/refund_integration_v1_1.manifest.json \

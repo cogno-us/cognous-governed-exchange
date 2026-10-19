@@ -239,12 +239,16 @@ def assess_message(message: dict[str, Any], bundle: dict[str, Any], registry: Lo
     if any(k not in message for k in required): return fail("structure", "GAX-SCHEMA-MISSING-REQUIRED", "NOT_UNDERSTOOD")
     if not message_id_is_safe(message["message_id"]): return fail("structure", "GAX-SCHEMA-MESSAGE-ID-UNSAFE", "NOT_UNDERSTOOD")
     if message["message_digest"] != digest({k: v for k, v in message.items() if k != "message_digest"}) or message["content_digest"] != digest(message["content"]): return fail("structure", "GAX-INTEGRITY-DIGEST", "NOT_UNDERSTOOD")
+    try:
+        if not isinstance(message["created_at"], str): raise ValueError("created_at must be a string")
+        parse_time(message["created_at"])
+    except (TypeError, ValueError, AttributeError): return fail("structure", "GAX-SCHEMA-MISSING-REQUIRED", "NOT_UNDERSTOOD")
     stages["structure"] = "passed"
     if message["profile"] != PROFILE or message["protocol_version"] != PROTOCOL_VERSION or message["message_type"] not in SUPPORTED_TYPES: return fail("profile", "GAX-PROFILE-UNSUPPORTED-OR-DOWNGRADE", "NOT_UNDERSTOOD")
     stages["profile"] = "passed"; prior = (seen_messages or {}).get(message["message_id"])
     if prior and prior != message["message_digest"]: return fail("identity_binding", "GAX-INTEGRITY-MESSAGE-ID-REUSE")
-    if not registry.sender_trusted(message["sender"]): return fail("identity_binding", "GAX-IDENTITY-SENDER-UNTRUSTED")
-    if message["recipient"] != registry.recipient or not registry.recipient_known(message["recipient"]): return fail("identity_binding", "GAX-IDENTITY-WRONG-RECIPIENT")
+    if not isinstance(message["sender"], str) or not registry.sender_trusted(message["sender"]): return fail("identity_binding", "GAX-IDENTITY-SENDER-UNTRUSTED")
+    if not isinstance(message["recipient"], str) or message["recipient"] != registry.recipient or not registry.recipient_known(message["recipient"]): return fail("identity_binding", "GAX-IDENTITY-WRONG-RECIPIENT")
     stages["identity_binding"] = "passed"
     if message["purpose"] != registry.relying_purpose: return fail("purpose", "GAX-PURPOSE-UNSUPPORTED")
     if parse_time(message["expires_at"]) <= parse_time(evaluation_time): return fail("freshness", "GAX-FRESHNESS-EXPIRED")

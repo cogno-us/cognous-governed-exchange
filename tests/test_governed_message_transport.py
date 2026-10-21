@@ -720,3 +720,29 @@ def test_genuinely_ambiguous_route_configuration_rejected():
     )
     with pytest.raises(ValueError, match="ambiguous transport route binding"):
         TrustedRouteTable([first, second])
+
+
+@pytest.mark.parametrize("bad_type", [["PROPOSE"], {"t": "PROPOSE"}, 5, None])
+def test_non_string_message_type_is_terminal_rejection_with_no_receipt(tmp_path, bad_type):
+    handler = DurableFixtureHandler(tmp_path / "effects.sqlite")
+    t = transport(tmp_path, handler)
+    item = message(message_id="msg-badtype", message_type=bad_type)
+    queue(t, item)
+    out = t.deliver("msg-badtype", now=NOW)
+    assert out["transport_state"] == "TERMINAL_REJECTED"
+    assert t.sender_store.outbox_record("msg-badtype")["state"] == "TERMINAL_REJECTED"
+    assert t.sender_store.outbox_record("msg-badtype")["terminal_reason"] == "unsupported_message_type"
+    assert handler.effects() == []
+    again = t.deliver("msg-badtype", now=LATER)
+    assert again["transport_state"] == "TERMINAL_REJECTED" and again["attempted"] is False
+
+
+@pytest.mark.parametrize("bad_type", [["PROPOSE"], {"t": "PROPOSE"}, 5, None])
+def test_accepted_adapter_guards_non_string_message_type_directly(bad_type):
+    from experiments.governed_message_transport.transport import AcceptedGaxRecipientAdapter
+    adapter = object.__new__(AcceptedGaxRecipientAdapter)
+    adapter._assess_message = lambda *a, **k: {"permitted_handling": "NOT_UNDERSTOOD", "errors": ["GAX-PROFILE-UNSUPPORTED-OR-DOWNGRADE"]}
+    adapter.bundle = adapter.registry = None
+    adapter.clock_policy = __import__("experiments.governed_message_transport.transport", fromlist=["x"]).DeliveryClockPolicy()
+    out = adapter.handle(message(message_type=bad_type), delivery_time=NOW)
+    assert out.execution == {"attempted": False, "reason": "unsupported_execution_message_type"}

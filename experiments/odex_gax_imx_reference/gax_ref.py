@@ -243,7 +243,7 @@ def assess_message(message: dict[str, Any], bundle: dict[str, Any], registry: Lo
         for member in ("created_at", "expires_at"):
             if not isinstance(message[member], str): raise ValueError(member + " must be a string")
             parse_time(message[member])
-    except (TypeError, ValueError, AttributeError): return fail("structure", "GAX-SCHEMA-MISSING-REQUIRED", "NOT_UNDERSTOOD")
+    except (TypeError, ValueError, AttributeError, OverflowError): return fail("structure", "GAX-SCHEMA-MISSING-REQUIRED", "NOT_UNDERSTOOD")
     if not isinstance(message["authority_refs"], list) or not all(isinstance(r, dict) for r in message["authority_refs"]) or not isinstance(message["evidence_refs"], list): return fail("structure", "GAX-SCHEMA-MISSING-REQUIRED", "NOT_UNDERSTOOD")
     stages["structure"] = "passed"
     if message["profile"] != PROFILE or message["protocol_version"] != PROTOCOL_VERSION or not isinstance(message["message_type"], str) or message["message_type"] not in SUPPORTED_TYPES: return fail("profile", "GAX-PROFILE-UNSUPPORTED-OR-DOWNGRADE", "NOT_UNDERSTOOD")
@@ -253,10 +253,12 @@ def assess_message(message: dict[str, Any], bundle: dict[str, Any], registry: Lo
     if not isinstance(message["recipient"], str) or message["recipient"] != registry.recipient or not registry.recipient_known(message["recipient"]): return fail("identity_binding", "GAX-IDENTITY-WRONG-RECIPIENT")
     stages["identity_binding"] = "passed"
     if message["purpose"] != registry.relying_purpose: return fail("purpose", "GAX-PURPOSE-UNSUPPORTED")
+    if parse_time(message["created_at"]) > parse_time(message["expires_at"]): return fail("freshness", "GAX-FRESHNESS-CREATED-AFTER-EXPIRY")
+    if parse_time(message["created_at"]) > parse_time(evaluation_time): return fail("freshness", "GAX-FRESHNESS-CREATED-IN-FUTURE")
     if parse_time(message["expires_at"]) <= parse_time(evaluation_time): return fail("freshness", "GAX-FRESHNESS-EXPIRED")
     stages["freshness"] = "passed"; proposal = runtime_proposal_model(bundle); p = proposal.model_dump(mode="json", exclude_none=False)
     expected_req = {"action_id": p["action_id"], "target": p["target"], "payload": p["payload"], "amount": p["amount"], "unit": p["unit"], "actor": p["actor"], "principal": p["principal"], "adapter_id": p["adapter_id"], "requested_permissions": p["requested_permissions"]}
-    if message["requested_action"] != expected_req or message["proposal_commitment"] != proposal_commitment(model=proposal) or message["operation_commitment"] != operation_commitment(model=proposal): return fail("reference_resolution", "GAX-REFERENCE-OPERATION-BINDING-MISMATCH")
+    if canonical_bytes(message["requested_action"]) != canonical_bytes(expected_req) or message["proposal_commitment"] != proposal_commitment(model=proposal) or message["operation_commitment"] != operation_commitment(model=proposal): return fail("reference_resolution", "GAX-REFERENCE-OPERATION-BINDING-MISMATCH")
     bundle_refs = [r for r in message["evidence_refs"] if isinstance(r, dict) and r.get("type") == "replay_bundle"]
     if bundle_refs:
         bundle_digest = digest(bundle)

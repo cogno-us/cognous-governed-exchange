@@ -954,7 +954,7 @@ class LocalDurableTransport:
     ) -> dict[str, Any]:
         try:
             trusted_now = iso(self.clock_policy.validate_now(now))
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             # Without a valid trusted current time, no transport conclusion is usable.
             trusted_now = now if isinstance(now, str) else ""
             return self._recipient_reject(envelope, now=trusted_now, reason="invalid_trusted_delivery_time")
@@ -980,7 +980,7 @@ class LocalDurableTransport:
                 message=message,
                 now=trusted_now,
             )
-        except (TypeError, ValueError) as exc:
+        except (TypeError, ValueError, OverflowError) as exc:
             return self._recipient_reject(envelope, now=trusted_now, reason=str(exc))
 
         try:

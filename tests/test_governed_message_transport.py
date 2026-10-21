@@ -477,6 +477,21 @@ def test_envelope_timestamp_policy_rejects_malformed_timezone_free_and_future(
     assert handler.call_count(item["message_id"]) == 0
 
 
+def test_overflowing_envelope_timestamp_is_a_typed_rejection_not_an_exception(tmp_path):
+    """B-F7: a timestamp that overflows on conversion to UTC is refused like any malformed timestamp."""
+    handler = DurableFixtureHandler(tmp_path / "effects.sqlite")
+    t = transport(tmp_path, handler)
+    item = message()
+    route = route_table().resolve("local-a-b")
+    env = make_transport_envelope(
+        governed_message=item, route=route, delivery_attempt_id="overflow-time", correlation_id="c", created_at=NOW,
+    )
+    env["expires_at"] = "9999-12-31T23:59:59-01:00"
+    ack = t.receive_envelope(env, now=NOW)
+    assert ack["acknowledgement_kind"] == ACK_KIND_TERMINAL_REJECTION
+    assert handler.call_count(item["message_id"]) == 0
+
+
 def test_governed_future_created_at_rejected_before_handler(tmp_path):
     handler = DurableFixtureHandler(tmp_path / "effects.sqlite")
     t = transport(tmp_path, handler)

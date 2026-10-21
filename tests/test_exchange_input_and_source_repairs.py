@@ -343,9 +343,16 @@ P4_PINS = {
     "EVIDENCE_PACK_REVISION": "54df6984dd418e2e0a09f89e54f281493475831c",
 }
 P2_PINS = {
+    "CP_REVISION": "0a41faa972699f7ec3063967a14cd9bdd3e67d27",
+    "MOLTBOT_REVISION": "ec728da6dc301a664b331ac8986afd6e850a1273",
+    "MANIFEST_REVISION": "fa170815ef96a54c233d0dd9da821b60debabf8b",
+    "REPLAY_REVISION": "028f63d1c001f99580583888fa4b4e46d77a267b",
+    "ODES_REVISION": "e86a25a1d660e74533337d38744e2934200a50ae",
+    "EVIDENCE_PACK_REVISION": "a3ebbb90559a44a88855139a182649d3792bb1ca",
+}
+P2_PREVIOUS_PINS = {
     "CP_REVISION": "e77fe0ee8714617899592528e660a80fbb2e864a",
     "MOLTBOT_REVISION": "cab4d9abc651c7efbafb429798d2c908f048bf5c",
-    "MANIFEST_REVISION": "fa170815ef96a54c233d0dd9da821b60debabf8b",
     "REPLAY_REVISION": "53c0cd60d565ea1797ed0be87a2310c5b68b24f6",
     "ODES_REVISION": "dc5cf19d405ce885b287cde2f78519d3109b9ae6",
     "EVIDENCE_PACK_REVISION": "99ba3211450b25a18007b4b62907b072fe05c964",
@@ -373,6 +380,14 @@ def test_security_runtime_generations_select_exact_separate_pins(monkeypatch, pr
     # P4 keeps the F5b Manifest and nothing else from F5b or the retained generation.
     assert {k: v for k, v in P4_PINS.items() if v in set(F5B_PINS.values()) | set(RETAINED_SECURITY_PINS.values())} == {
         "MANIFEST_REVISION": P4_PINS["MANIFEST_REVISION"]}
+
+
+@pytest.mark.parametrize("name, old", sorted(P2_PREVIOUS_PINS.items()))
+def test_p2_previous_ties_are_replaced_not_kept(monkeypatch, name, old):
+    module = _load_with_profile(monkeypatch, "security-runtime-p2-20261018")
+    assert getattr(module, name) != old
+    assert old not in {getattr(module, n) for n in PINS}
+    assert old not in P2_PINS.values()
 
 
 @pytest.mark.parametrize("profile", ["security-runtime-f5b-20261016", "security-runtime-p4-20261017",

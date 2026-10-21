@@ -1,3 +1,7 @@
+## Programme 2 source tuple re-tied after the scan-3 fixes (22 October 2026)
+
+- Experimental exchange, no behaviour change. The Programme 2 compatibility profile `security-runtime-p2-20261018` keeps its name and now selects control plane `5c474ba8`, runtime `79f39166`, manifest `8b016916`, Replay `d268b1ea`, ODES `25328698`, evidence pack `6638942e` (was `2bac7875` / `6b16962d` / `ff549082` / `6a6a4774` / `2893d935` / `fd030615`). The strict source check still compares each checkout's Git HEAD to these strings exactly. P4, F5b and the earlier profiles are unchanged. This selects revisions for a compatibility check only: it is non-authorizing, creates no production grant and claims no certification or production readiness.
+
 ## Programme 2 source tuple moved to current mains (19 October 2026)
 
 - Experimental exchange, no behaviour change. The Programme 2 compatibility profile `security-runtime-p2-20261018` keeps its name and now selects the current mains: control plane `2bac7875`, runtime `6b16962d`, manifest `ff549082`, Replay `6a6a4774`, ODES `2893d935`, evidence pack `fd030615` (was `6093aca7` / `62a5cc15` / `f9ae8527` / `c8e665bd` / `bff8307c` / `cde3f1f1`; an earlier selection on the same date named runtime `c4a05883`, Replay `2a7963b1`, ODES `4bf12128` and evidence pack `80e24650`). The strict source check still compares each checkout's Git HEAD to these strings exactly. P4, F5b and the earlier profiles are unchanged.

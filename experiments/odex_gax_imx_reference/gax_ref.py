@@ -238,7 +238,9 @@ def assess_message(message: dict[str, Any], bundle: dict[str, Any], registry: Lo
     required = ["message_id", "conversation_id", "profile", "protocol_version", "message_type", "created_at", "expires_at", "sender", "recipient", "purpose", "requested_action", "operation_commitment", "proposal_commitment", "authority_refs", "evidence_refs", "content", "content_digest", "message_digest"]
     if any(k not in message for k in required): return fail("structure", "GAX-SCHEMA-MISSING-REQUIRED", "NOT_UNDERSTOOD")
     if not message_id_is_safe(message["message_id"]): return fail("structure", "GAX-SCHEMA-MESSAGE-ID-UNSAFE", "NOT_UNDERSTOOD")
-    if message["message_digest"] != digest({k: v for k, v in message.items() if k != "message_digest"}) or message["content_digest"] != digest(message["content"]): return fail("structure", "GAX-INTEGRITY-DIGEST", "NOT_UNDERSTOOD")
+    try: digest_ok = message["message_digest"] == digest({k: v for k, v in message.items() if k != "message_digest"}) and message["content_digest"] == digest(message["content"])
+    except (TypeError, ValueError, RecursionError, OverflowError): digest_ok = False  # NaN/Infinity (json.loads) or an unserialisable member cannot be committed
+    if not digest_ok: return fail("structure", "GAX-INTEGRITY-DIGEST", "NOT_UNDERSTOOD")
     try:
         for member in ("created_at", "expires_at"):
             if not isinstance(message[member], str): raise ValueError(member + " must be a string")
@@ -266,7 +268,8 @@ def assess_message(message: dict[str, Any], bundle: dict[str, Any], registry: Lo
         stages["evidence_digest"] = "verified"
     else:
         stages["evidence_digest"] = "not_verified_no_replay_bundle_digest_in_evidence_refs"
-    if not any(r.get("ref") == p.get("authority_context_ref") for r in message["authority_refs"]): return fail("authority_reference", "GAX-AUTHORITY-REFERENCE-MISMATCH")
+    proposal_ref = p.get("authority_context_ref")  # RuntimeProposal allows None/"": a missing ref must not match an entry without one
+    if not (isinstance(proposal_ref, str) and proposal_ref) or not any(r.get("ref") == proposal_ref for r in message["authority_refs"]): return fail("authority_reference", "GAX-AUTHORITY-REFERENCE-MISMATCH")
     stages["reference_resolution"] = "passed"; stages["authority_reference"] = "present_not_authorizing"
     if message["message_type"] in INFORMATIONAL_TYPES:
         stages["communicative_act"] = "informational_no_effect"; return {"permitted_handling": "INFORMATIONAL_ONLY", "stages": stages, "errors": errors, "message_received": True, "message_understood": True}

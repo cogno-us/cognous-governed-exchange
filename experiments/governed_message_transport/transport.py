@@ -128,7 +128,10 @@ def governed_message_commitment(message: dict[str, Any]) -> str:
     supplied = message.get("message_digest")
     if not isinstance(supplied, str):
         raise ValueError("governed message lacks message_digest")
-    computed = commitment({k: v for k, v in message.items() if k != "message_digest"})
+    try:
+        computed = commitment({k: v for k, v in message.items() if k != "message_digest"})
+    except (TypeError, ValueError, RecursionError, OverflowError):
+        raise ValueError("governed message not canonicalizable") from None
     if supplied != computed:
         raise ValueError("governed message digest mismatch")
     content = message.get("content")
@@ -281,6 +284,16 @@ class AcceptedGaxRecipientAdapter:
             evaluation_time=current_time,
         )
         message_type = message.get("message_type")
+        if not isinstance(message_type, str):
+            # Type check first: an unhashable value (a list or dict) must not reach the set membership tests.
+            return RecipientOutcome(
+                assessment=assessment,
+                execution={
+                    "attempted": False,
+                    "reason": "unsupported_execution_message_type",
+                },
+                producer_refs={},
+            )
         if message_type in INFORMATIONAL_TYPES:
             return RecipientOutcome(
                 assessment=assessment,
@@ -998,6 +1011,9 @@ class LocalDurableTransport:
             return self._recipient_reject(envelope, now=trusted_now, reason=str(exc))
         if expected != envelope.get("content_commitment"):
             return self._recipient_reject(envelope, now=trusted_now, reason="content_commitment_mismatch")
+        if not isinstance(message.get("message_type"), str):
+            # Same typed refusal class as the assessment path (GAX-PROFILE-UNSUPPORTED-OR-DOWNGRADE); no durable receipt is written.
+            return self._recipient_reject(envelope, now=trusted_now, reason="unsupported_message_type")
 
         try:
             is_new, _ = self.recipient_store.record_inbox_before_ack(

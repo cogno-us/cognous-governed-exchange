@@ -164,3 +164,28 @@ def test_exchange_refuses_malformed_members_before_any_record(tmp_path, change):
     assert result["assessment"]["permitted_handling"] == "NOT_UNDERSTOOD"
     assert result["execution"]["attempted"] is False
     assert runtime.TransactionalExchangeStore(store_path).seen_messages() == {}
+
+
+@pytest.mark.parametrize("token", ["NaN", "Infinity", "-Infinity"])
+def test_non_finite_json_number_is_a_typed_digest_refusal_not_an_exception(token):
+    import json
+    msg = json.loads(json.dumps(signed()).replace('"synthetic"', token, 1))
+    assert msg["content"]["summary"] != "synthetic"
+    out = base.assess_message(msg, {}, registry(), evaluation_time=EVAL)
+    assert out["permitted_handling"] == "NOT_UNDERSTOOD"
+    assert out["errors"] == ["GAX-INTEGRITY-DIGEST"]
+
+
+def test_missing_proposal_authority_ref_does_not_match_entry_without_ref(monkeypatch):
+    # RuntimeProposal.authority_context_ref is Optional; None must not match an entry that has no "ref".
+    class _P:
+        def model_dump(self, **_):
+            return {"action_id": "a", "target": None, "payload": None, "amount": None, "unit": None,
+                    "actor": None, "principal": None, "adapter_id": None, "requested_permissions": None,
+                    "authority_context_ref": None}
+    monkeypatch.setattr(base, "runtime_proposal_model", lambda bundle: _P())
+    for refs in ([{"type": "authority_context"}], [{"type": "authority_context", "ref": None}],
+                 [{"type": "authority_context", "ref": ""}]):
+        out = base.assess_message(signed(authority_refs=refs), {}, registry(), evaluation_time=EVAL)
+        assert out["permitted_handling"] == "REFUSE"
+        assert out["errors"] == ["GAX-AUTHORITY-REFERENCE-MISMATCH"]

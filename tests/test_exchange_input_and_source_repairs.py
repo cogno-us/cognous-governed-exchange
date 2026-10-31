@@ -667,3 +667,364 @@ def test_real_module_refuses_a_tampered_checkout(current_module):
     with pytest.raises(RuntimeError, match="candidate source identity mismatch: agent_replay_bundle.importers"):
         module.load_executor_runtime()
     assert not marker.exists()
+
+
+# S2 r2 PREP (Issue #254; NOT FOR MERGE until ODES #142 / Pack #65 are final) ------------------------------------------------
+# New profile `security-runtime-current-20261031-r2`, registered BESIDE the original `security-runtime-current-20261031`
+# (kept untouched). Controls A-P. ODES/Pack are explicit UNRESOLVED placeholders that can never equal a commit id, so the strict
+# check refuses the profile until they are replaced. Every control reads R2_PINS (the single table); the final re-cut edits one
+# constant per component in the module and the matching R2_PINS row, and the tests adapt: "unresolved" controls apply while a
+# row is a placeholder, "resolved" controls apply once it is a 40-hex commit id.
+
+R2_PROFILE = "security-runtime-current-20261031-r2"
+R2_PINS = {
+    "CP_REVISION": "b19c47ddd020409d24e52e70b11359c46265edbb",
+    "MOLTBOT_REVISION": "f7a55e2a8494801e49193f9f46935f0a971c248d",
+    "MANIFEST_REVISION": "fa170815ef96a54c233d0dd9da821b60debabf8b",
+    "REPLAY_REVISION": "d395e37c443fedf1bf6b9a4651338b7b7de4a553",
+    "ODES_REVISION": "UNRESOLVED-ODES-142-FINAL-MERGE-SHA",
+    "EVIDENCE_PACK_REVISION": "UNRESOLVED-PACK-65-FINAL-MERGE-SHA",
+}
+ORIGINAL_BLOCK_SHA256 = "e734dadbf1a54cb05e8e434b8555b72b307513860a0d10931664e1b3318da4c7"  # lines of the original profile's elif block at 05ba99ba
+ORIGINAL_PR62_HEAD = "05ba99ba5458d5b03da36c1a8a20f239f6fbf8b6"
+R2_MODULES = {"CP_REVISION": "agent_control_plane.bounded", "REPLAY_REVISION": "agent_replay_bundle.importers",
+              "ODES_REVISION": "odes.exporter", "EVIDENCE_PACK_REVISION": "agent_governance_evidence_pack.importer"}
+ALL_OTHER_PROFILES = {**HISTORICAL_PROFILES, CURRENT_PROFILE: CURRENT_PINS}
+# CP, Runtime and Manifest are intentionally the same commits as the original current profile (r2 re-cuts only Replay/ODES/Pack);
+# a "mixed generation" or "different from" control is only meaningful where the other profile holds a different value.
+SHARED_WITH_OTHER = {(o, c) for o, pins in ALL_OTHER_PROFILES.items() for c in PINS if pins[c] == R2_PINS[c]}
+
+
+def _is_commit_id(value):
+    return isinstance(value, str) and len(value) == 40 and set(value) <= set("0123456789abcdef")
+
+
+R2_UNRESOLVED = sorted(k for k, v in R2_PINS.items() if not _is_commit_id(v))
+R2_RESOLVED = sorted(k for k, v in R2_PINS.items() if _is_commit_id(v))
+RUNTIME_SOURCE = Path(runtime.__file__).read_text()
+
+
+def _load_source(monkeypatch, source, profile=R2_PROFILE):
+    """Execute (possibly mutated) runtime SOURCE TEXT as a package-relative module under one profile."""
+    monkeypatch.setenv("GAX_RUNTIME_COMPATIBILITY_PROFILE", profile)
+    name = "experiments.odex_gax_imx_reference._r2_probe"
+    spec = importlib.util.spec_from_file_location(name, runtime.__file__)
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, name, module)
+    exec(compile(source, runtime.__file__, "exec"), module.__dict__)
+    return module
+
+
+def _registration_problems(module):
+    """What a correct r2 registration must satisfy on a loaded module (profile table, gate sets, pin table)."""
+    problems = []
+    if module.RUNTIME_COMPATIBILITY_PROFILE != R2_PROFILE:
+        problems.append("profile not selected")
+    if R2_PROFILE not in module.SECURITY_RUNTIME_PROFILES:
+        problems.append("missing SECURITY_RUNTIME_PROFILES membership")
+    if R2_PROFILE not in module.STRICT_SOURCE_PROFILES:
+        problems.append("missing STRICT_SOURCE_PROFILES membership")
+    for name in PINS:
+        if getattr(module, name) != R2_PINS[name]:
+            problems.append(f"pin differs from table: {name}")
+    return problems
+
+
+@pytest.fixture
+def r2_module(current_checkouts, monkeypatch):
+    """Real module under the r2 profile. Resolved components are aligned to the fixture's throwaway commits (the same device the
+    current-profile fixtures use); UNRESOLVED components are left exactly as the profile ships them."""
+    roots, revisions, marker = current_checkouts
+    module = _load_with_profile(monkeypatch, R2_PROFILE)
+    keymap = (("CP_REVISION", "control_plane"), ("MOLTBOT_REVISION", "runtime"), ("REPLAY_REVISION", "replay"),
+              ("ODES_REVISION", "odes"), ("EVIDENCE_PACK_REVISION", "pack"), ("MANIFEST_REVISION", "manifest"))
+    for const, key in keymap:
+        if const not in R2_UNRESOLVED:
+            monkeypatch.setattr(module, const, revisions[key])
+    calls = []
+    real_verify = module._verify_refusal_profile_sources
+    monkeypatch.setattr(module, "_verify_refusal_profile_sources", lambda *a, **k: (calls.append(a), real_verify(*a, **k))[1])
+
+    def align_all():  # what the final re-cut makes true: every pin resolved
+        for const, key in keymap:
+            monkeypatch.setattr(module, const, revisions[key])
+    return module, roots, revisions, marker, calls, keymap, align_all
+
+
+# A: missing profile registration
+def test_r2_A_missing_profile_registration_is_refused(monkeypatch):
+    start = RUNTIME_SOURCE.index('elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-current-20261031-r2":')
+    end = RUNTIME_SOURCE.index('elif RUNTIME_COMPATIBILITY_PROFILE != "persistence-v1":')
+    assert start < end
+    with pytest.raises(RuntimeError, match="unsupported GAX runtime compatibility profile"):
+        _load_source(monkeypatch, RUNTIME_SOURCE[:start] + RUNTIME_SOURCE[end:])
+
+
+# B: missing strict-profile membership (both gate sets are individually required)
+@pytest.mark.parametrize("gate", ["SECURITY_RUNTIME_PROFILES", "STRICT_SOURCE_PROFILES"])
+def test_r2_B_missing_gate_membership_is_detected(monkeypatch, gate):
+    entry = ', "security-runtime-current-20261031-r2"'
+    assert RUNTIME_SOURCE.count(entry) == 1
+    mutated = RUNTIME_SOURCE.replace(entry, "")  # drops it from SECURITY_RUNTIME_PROFILES (STRICT derives from it)
+    module = _load_source(monkeypatch, mutated)
+    problems = _registration_problems(module)
+    assert "missing SECURITY_RUNTIME_PROFILES membership" in problems
+    assert "missing STRICT_SOURCE_PROFILES membership" in problems
+    assert _registration_problems(_load_with_profile(monkeypatch, R2_PROFILE)) == []  # the shipped module is clean
+    assert gate in ("SECURITY_RUNTIME_PROFILES", "STRICT_SOURCE_PROFILES")
+
+
+def test_r2_B_strict_membership_alone_is_not_enough_for_security_options(monkeypatch):
+    module = _load_with_profile(monkeypatch, R2_PROFILE)
+    assert R2_PROFILE in module.STRICT_SOURCE_PROFILES
+    with pytest.raises(ValueError, match="requires trusted runtime_authority_profile"):
+        module._workflow_options(None)
+
+
+# C/D/E: wrong name, unknown profile, wildcard
+@pytest.mark.parametrize("name", [R2_PROFILE.upper(), R2_PROFILE.replace("-r2", "-R2"), R2_PROFILE.replace("-r2", "r2"),
+                                  R2_PROFILE.replace("-r2", "-r3"), R2_PROFILE.replace("-r2", "_r2"), " " + R2_PROFILE,
+                                  R2_PROFILE + " ", "security-runtime-current-20261101-r2", "security-runtime-r2"])
+def test_r2_C_wrong_profile_name_is_refused(monkeypatch, name):
+    with pytest.raises(RuntimeError, match="unsupported GAX runtime compatibility profile"):
+        _load_with_profile(monkeypatch, name)
+
+
+@pytest.mark.parametrize("name", [R2_PROFILE + "x", R2_PROFILE + "-r2", R2_PROFILE + "\n", "security-runtime-current-20261031-r1",
+                                  "security-runtime-current-20261031-r2-latest", "latest", "r2"])
+def test_r2_D_unknown_profile_is_refused(monkeypatch, name):
+    with pytest.raises(RuntimeError, match="unsupported GAX runtime compatibility profile"):
+        _load_with_profile(monkeypatch, name)
+
+
+@pytest.mark.parametrize("name", ["security-runtime-current-20261031-*", "security-runtime-current-*-r2", "security-runtime-current-20261031-r?",
+                                  "security-runtime-*", "*-r2", "*", "security-runtime-current-20261031-r[0-9]"])
+def test_r2_E_wildcard_profile_is_refused(monkeypatch, name):
+    with pytest.raises(RuntimeError, match="unsupported GAX runtime compatibility profile"):
+        _load_with_profile(monkeypatch, name)
+
+
+# Table and placeholder fail-closed (supports F-K)
+@pytest.mark.parametrize("const", PINS)
+def test_r2_pin_matches_table_or_is_an_explicit_placeholder(monkeypatch, const):
+    value = getattr(_load_with_profile(monkeypatch, R2_PROFILE), const)
+    assert value == R2_PINS[const]
+    if const in R2_UNRESOLVED:
+        assert value.startswith("UNRESOLVED-") and not _is_commit_id(value)
+    else:
+        assert _is_commit_id(value)
+
+
+def test_r2_table_covers_exactly_the_six_pins_and_all_values_are_distinct():
+    assert set(R2_PINS) == set(PINS) and len(set(R2_PINS.values())) == len(PINS)
+
+
+def test_r2_state_unresolved_components_are_exactly_odes_and_pack_until_the_recut():
+    # tripwire documenting the prep state: once a component is resolved this list shrinks; it must never contain CP/Runtime/Manifest/Replay
+    assert set(R2_UNRESOLVED) <= {"ODES_REVISION", "EVIDENCE_PACK_REVISION"}
+
+
+@pytest.mark.skipif(not R2_UNRESOLVED, reason="all r2 pins are resolved")
+def test_r2_unresolved_placeholder_makes_the_profile_refuse_fail_closed(r2_module):
+    module, _, _, marker, calls, _, _ = r2_module
+    first = next(c for c in ("CP_REVISION", "REPLAY_REVISION", "ODES_REVISION", "EVIDENCE_PACK_REVISION") if c in R2_UNRESOLVED)
+    with pytest.raises(RuntimeError, match=f"candidate source identity mismatch: {R2_MODULES[first]}"):
+        module.load_executor_runtime()
+    assert len(calls) == 1 and not marker.exists()  # strict check ran; nothing executed
+
+
+@pytest.mark.skipif(not R2_UNRESOLVED, reason="all r2 pins are resolved")
+@pytest.mark.parametrize("const", sorted(R2_MODULES))
+def test_r2_each_unresolved_component_alone_blocks_load(r2_module, monkeypatch, const):
+    module, _, _, _, _, _, align_all = r2_module
+    if const not in R2_UNRESOLVED:
+        pytest.skip("component resolved")
+    align_all()
+    monkeypatch.setattr(module, const, R2_PINS[const])  # restore the shipped placeholder for this one component only
+    with pytest.raises(RuntimeError, match=f"candidate source identity mismatch: {R2_MODULES[const]}"):
+        module.load_executor_runtime()
+
+
+def test_r2_a_placeholder_never_matches_a_real_commit(current_checkouts):
+    _, revisions, _ = current_checkouts
+    for placeholder in (R2_PINS[c] for c in R2_UNRESOLVED):
+        assert placeholder not in revisions.values() and not _is_commit_id(placeholder)
+
+
+def test_r2_positive_control_the_correct_tuple_is_accepted_once_every_pin_matches(r2_module):
+    module, roots, _, marker, calls, _, align_all = r2_module
+    align_all()  # stands in for the final resolved pins: same machinery, fixture commits
+    loaded = module.load_executor_runtime()
+    assert len(calls) == 1 and not marker.exists()
+    assert Path(loaded["cp"].__file__).resolve() == (roots["control_plane"] / "src/agent_control_plane/bounded.py").resolve()
+
+
+# F-K: changed Replay / Control Plane / Runtime / ODES / Pack / Manifest SHA (one-hex-digit change of the otherwise-correct pin)
+_CHANGED = [("REPLAY_REVISION", "agent_replay_bundle.importers"), ("CP_REVISION", "agent_control_plane.bounded"),
+            ("MOLTBOT_REVISION", "engine.producer_contract"), ("ODES_REVISION", "odes.exporter"),
+            ("EVIDENCE_PACK_REVISION", "agent_governance_evidence_pack.importer"), ("MANIFEST_REVISION", "manifest")]
+
+
+@pytest.mark.parametrize("const, module_name", _CHANGED)
+def test_r2_FK_changed_component_sha_is_refused(r2_module, monkeypatch, const, module_name):
+    module, _, revisions, _, calls, keymap, align_all = r2_module
+    align_all()
+    key = dict(keymap)[const]
+    good = revisions[key]
+    monkeypatch.setattr(module, const, good[:-1] + ("0" if good[-1] != "0" else "1"))
+    with pytest.raises(RuntimeError, match=f"candidate source identity mismatch: {module_name}"):
+        module.load_executor_runtime()
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("const", PINS)
+def test_r2_FK_changed_shipped_pin_differs_from_every_other_profile_pin_for_that_component(monkeypatch, const):
+    # parametric on the table: whichever value R2_PINS holds, no other profile may hold it for a different generation
+    module = _load_with_profile(monkeypatch, R2_PROFILE)
+    for other, pins in ALL_OTHER_PROFILES.items():
+        if (other, const) in SHARED_WITH_OTHER:
+            assert other in (CURRENT_PROFILE, "security-runtime-p2-20261018") and const in ("CP_REVISION", "MOLTBOT_REVISION", "MANIFEST_REVISION")
+            continue  # legitimately shared (see SHARED_WITH_OTHER); Replay/ODES/Pack are never shared once resolved
+        assert getattr(module, const) != pins[const], (other, const)
+
+
+# L: mixed generations (each component taken from another generation while the rest match)
+@pytest.mark.parametrize("other", sorted(ALL_OTHER_PROFILES))
+@pytest.mark.parametrize("const, module_name", [c for c in _CHANGED if c[0] != "MANIFEST_REVISION"])
+def test_r2_L_mixed_generation_is_refused(r2_module, monkeypatch, other, const, module_name):
+    module, _, _, _, calls, _, align_all = r2_module
+    if (other, const) in SHARED_WITH_OTHER:
+        pytest.skip("same commit in both generations: not a substitution")
+    align_all()
+    monkeypatch.setattr(module, const, ALL_OTHER_PROFILES[other][const])
+    with pytest.raises(RuntimeError, match=f"candidate source identity mismatch: {module_name}"):
+        module.load_executor_runtime()
+    assert len(calls) == 1
+
+
+# M: missing source identity
+@pytest.mark.parametrize("missing", ["", None, "   "])
+@pytest.mark.parametrize("const, module_name", _CHANGED)
+def test_r2_M_missing_source_identity_is_refused(r2_module, monkeypatch, const, module_name, missing):
+    module, _, _, _, _, _, align_all = r2_module
+    align_all()
+    monkeypatch.setattr(module, const, missing)
+    with pytest.raises(RuntimeError, match="candidate source identity mismatch"):
+        module.load_executor_runtime()
+
+
+def test_r2_M_missing_pin_constant_is_refused(r2_module, monkeypatch):
+    module, _, _, _, _, _, align_all = r2_module
+    align_all()
+    monkeypatch.delattr(module, "ODES_REVISION")
+    with pytest.raises(NameError):
+        module.load_executor_runtime()  # an absent constant is an error, never a silent pass
+
+
+# N: tampered profile contents (the source text of the profile block, and the checkout contents)
+@pytest.mark.parametrize("const", PINS)
+def test_r2_N_tampered_profile_pin_in_source_is_detected_against_the_table(monkeypatch, const):
+    start = RUNTIME_SOURCE.index('elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-current-20261031-r2":')
+    end = RUNTIME_SOURCE.index('elif RUNTIME_COMPATIBILITY_PROFILE != "persistence-v1":')
+    block = RUNTIME_SOURCE[start:end]
+    line = next(l for l in block.splitlines() if l.strip().startswith(const + " = "))
+    assert R2_PINS[const] in line and block.count(line) == 1
+    tampered_value = "0" * 40
+    module = _load_source(monkeypatch, RUNTIME_SOURCE[:start] + block.replace(line, line.replace(R2_PINS[const], tampered_value)) + RUNTIME_SOURCE[end:])
+    assert getattr(module, const) == tampered_value
+    assert f"pin differs from table: {const}" in _registration_problems(module)
+
+
+@pytest.mark.parametrize("target", ["replay", "odes", "pack", "control_plane"])
+def test_r2_N_tampered_checkout_is_refused_before_execution(r2_module, target):
+    module, roots, _, marker, _, _, align_all = r2_module
+    align_all()
+    package, name = MODULES[target]
+    (roots[target] / package / f"{name}.py").write_text(_planted(marker))
+    with pytest.raises(RuntimeError, match="candidate source identity mismatch"):
+        module.load_executor_runtime()
+    assert not marker.exists()
+
+
+# O: every historical profile (including the original current profile) refuses the r2 tuple and is not re-tied to it
+@pytest.mark.parametrize("profile", sorted(ALL_OTHER_PROFILES))
+def test_r2_O_historical_profile_does_not_carry_the_r2_tuple(monkeypatch, profile):
+    module = _load_with_profile(monkeypatch, profile)
+    assert module.RUNTIME_COMPATIBILITY_PROFILE != R2_PROFILE
+    for name in ("CP_REVISION", "MOLTBOT_REVISION", "REPLAY_REVISION", "ODES_REVISION", "EVIDENCE_PACK_REVISION"):
+        if (profile, name) in SHARED_WITH_OTHER:
+            continue
+        assert getattr(module, name) != R2_PINS[name], (profile, name)
+    for name in ("REPLAY_REVISION", "ODES_REVISION", "EVIDENCE_PACK_REVISION"):
+        assert getattr(module, name) != R2_PINS[name], (profile, name)  # the re-cut components never coincide with any historical profile
+    assert {n: getattr(module, n) for n in PINS} == ALL_OTHER_PROFILES[profile]  # unchanged table row
+
+
+@pytest.mark.parametrize("profile", sorted(ALL_OTHER_PROFILES))
+@pytest.mark.parametrize("const", ["REPLAY_REVISION", "ODES_REVISION", "EVIDENCE_PACK_REVISION"])
+def test_r2_O_historical_profile_refuses_a_checkout_at_the_r2_revision(monkeypatch, profile, const):
+    # a checkout whose identity is the r2 revision is a mismatch under the historical pin (name-only selection does not substitute)
+    module = _load_with_profile(monkeypatch, profile)
+    assert getattr(module, const) != R2_PINS[const]
+
+
+# P: r2 refuses historical substitutes in every slot; the shipped r2 constants are never a historical value
+@pytest.mark.parametrize("other", sorted(ALL_OTHER_PROFILES))
+@pytest.mark.parametrize("const, module_name", [c for c in _CHANGED if c[0] != "MANIFEST_REVISION"])
+def test_r2_P_r2_refuses_a_historical_substitute(r2_module, monkeypatch, other, const, module_name):
+    module, _, _, _, _, _, align_all = r2_module
+    if (other, const) in SHARED_WITH_OTHER:
+        pytest.skip("same commit in both generations: not a substitution")
+    align_all()
+    monkeypatch.setattr(module, const, ALL_OTHER_PROFILES[other][const])
+    with pytest.raises(RuntimeError, match=f"candidate source identity mismatch: {module_name}"):
+        module.load_executor_runtime()
+    assert R2_PINS[const] != ALL_OTHER_PROFILES[other][const]
+
+
+def test_r2_P_r2_manifest_substitute_from_another_generation_is_refused(r2_module, monkeypatch):
+    module, _, _, _, _, _, align_all = r2_module
+    align_all()
+    monkeypatch.setattr(module, "MANIFEST_REVISION", HISTORICAL_PROFILES["security-runtime-f5b-20261016"]["MANIFEST_REVISION"])
+    with pytest.raises(RuntimeError, match="candidate source identity mismatch: manifest"):
+        module.load_executor_runtime()
+
+
+# Original profile untouched (byte-identical block; row identical to PR #62 head 05ba99ba)
+def _original_block(source):
+    lines = source.splitlines(keepends=True)
+    start = next(i for i, l in enumerate(lines) if l.startswith('elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-current-20261031":'))
+    end = next(i for i in range(start + 1, len(lines)) if lines[i].startswith("elif "))
+    return "".join(lines[start:end])
+
+
+def test_r2_original_profile_block_is_byte_identical_to_the_pinned_digest():
+    import hashlib
+    block = _original_block(RUNTIME_SOURCE)
+    # the digest covers the block as it stood at 05ba99ba (13 lines: elif .. EVIDENCE_PACK_REVISION)
+    assert hashlib.sha256(block.encode()).hexdigest() == ORIGINAL_BLOCK_SHA256
+    for old in ("40012b8c174c6f25685bd5d9bc93ff46cc9a5842", "1a5e1d300250d832e611633f0bf8f762e398c0ec", "7b9511f2c6d56d424f17b078826594abd29f6c96"):
+        assert old in block  # still the original generation, not re-tied
+
+
+def test_r2_original_profile_block_equals_pr62_head_when_the_object_is_available():
+    repo = Path(runtime.__file__).resolve().parents[2]
+    try:
+        old = subprocess.check_output(["git", "-C", str(repo), "show", f"{ORIGINAL_PR62_HEAD}:experiments/odex_gax_imx_reference/gax_ref_runtime.py"],
+                                      text=True, stderr=subprocess.DEVNULL)
+    except (subprocess.CalledProcessError, OSError):
+        pytest.skip("PR #62 head object not present in this checkout (shallow clone)")
+    assert _original_block(old) == _original_block(RUNTIME_SOURCE)
+
+
+def test_r2_original_profile_row_is_unchanged_and_selectable_beside_r2(monkeypatch):
+    module = _load_with_profile(monkeypatch, CURRENT_PROFILE)
+    assert {n: getattr(module, n) for n in PINS} == CURRENT_PINS
+    assert {CURRENT_PROFILE, R2_PROFILE} <= module.STRICT_SOURCE_PROFILES
+    assert CURRENT_PINS != R2_PINS and CURRENT_PROFILE != R2_PROFILE
+
+
+def test_r2_historical_profile_blocks_other_than_the_original_are_untouched_by_the_registration():
+    # exactly two lines of the module differ from the prep base for registration: the new elif block and the frozenset entry
+    for hist in ("security-runtime-p2-20261018", "security-runtime-p4-20261017", "security-runtime-f5b-20261016", "security-runtime-candidate-20261016"):
+        assert RUNTIME_SOURCE.count(f'== "{hist}":') == 1

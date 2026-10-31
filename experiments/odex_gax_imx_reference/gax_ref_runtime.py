@@ -108,11 +108,23 @@ elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-current-20261031":
     REPLAY_REVISION = "40012b8c174c6f25685bd5d9bc93ff46cc9a5842"
     ODES_REVISION = "1a5e1d300250d832e611633f0bf8f762e398c0ec"
     EVIDENCE_PACK_REVISION = "7b9511f2c6d56d424f17b078826594abd29f6c96"
+elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-current-20261031-r2":
+    # PREPARATION (NOT FOR MERGE until ODES and Pack are final): re-cut of the current-stack generation as a NEW profile,
+    # added beside "security-runtime-current-20261031" (kept byte-unchanged; one name never denotes two tuples). Exact
+    # revisions only (no ranges, no wildcards). ODES_REVISION and EVIDENCE_PACK_REVISION are deliberately UNRESOLVED
+    # placeholders: they can never equal a Git commit id, so the strict source-identity check refuses this profile
+    # (fail-closed) until the final merged SHAs replace them. No other profile is affected; no permissive fallback.
+    CP_REVISION = "b19c47ddd020409d24e52e70b11359c46265edbb"
+    MOLTBOT_REVISION = "f7a55e2a8494801e49193f9f46935f0a971c248d"
+    MANIFEST_REVISION = "fa170815ef96a54c233d0dd9da821b60debabf8b"
+    REPLAY_REVISION = "d395e37c443fedf1bf6b9a4651338b7b7de4a553"
+    ODES_REVISION = "UNRESOLVED-ODES-142-FINAL-MERGE-SHA"
+    EVIDENCE_PACK_REVISION = "UNRESOLVED-PACK-65-FINAL-MERGE-SHA"
 elif RUNTIME_COMPATIBILITY_PROFILE != "persistence-v1":
     raise RuntimeError("unsupported GAX runtime compatibility profile")
 
 # Profiles that require trusted runtime-authority configuration.
-SECURITY_RUNTIME_PROFILES = frozenset({"security-runtime-candidate-20261016", "security-runtime-f5b-20261016", "security-runtime-p4-20261017", "security-runtime-p2-20261018", "security-runtime-current-20261031"})
+SECURITY_RUNTIME_PROFILES = frozenset({"security-runtime-candidate-20261016", "security-runtime-f5b-20261016", "security-runtime-p4-20261017", "security-runtime-p2-20261018", "security-runtime-current-20261031", "security-runtime-current-20261031-r2"})
 # Profiles whose candidate sources are verified before import.
 STRICT_SOURCE_PROFILES = frozenset({"typed-refusal-candidate-20261015", *SECURITY_RUNTIME_PROFILES})
 

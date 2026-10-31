@@ -109,17 +109,17 @@ elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-current-20261031":
     ODES_REVISION = "1a5e1d300250d832e611633f0bf8f762e398c0ec"
     EVIDENCE_PACK_REVISION = "7b9511f2c6d56d424f17b078826594abd29f6c96"
 elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-current-20261031-r2":
-    # PREPARATION (NOT FOR MERGE until ODES and Pack are final): re-cut of the current-stack generation as a NEW profile,
-    # added beside "security-runtime-current-20261031" (kept byte-unchanged; one name never denotes two tuples). Exact
-    # revisions only (no ranges, no wildcards). ODES_REVISION and EVIDENCE_PACK_REVISION are deliberately UNRESOLVED
-    # placeholders: they can never equal a Git commit id, so the strict source-identity check refuses this profile
-    # (fail-closed) until the final merged SHAs replace them. No other profile is affected; no permissive fallback.
+    # Re-cut of the current-stack generation as a NEW profile, added beside "security-runtime-current-20261031" (kept
+    # byte-unchanged; one name never denotes two tuples). Exact revisions only (no ranges, no wildcards): Replay d395e37c,
+    # ODES 77fd7a1c (merge of PR #142) and Evidence Pack 96f5f2e1 (merge of PR #65), with the Control Plane, Runtime and
+    # Manifest values of the original profile. It records which tuple the strict source-identity check accepts; it does
+    # not certify the tuple and changes no default. No other profile is affected; no permissive fallback.
     CP_REVISION = "b19c47ddd020409d24e52e70b11359c46265edbb"
     MOLTBOT_REVISION = "f7a55e2a8494801e49193f9f46935f0a971c248d"
     MANIFEST_REVISION = "fa170815ef96a54c233d0dd9da821b60debabf8b"
     REPLAY_REVISION = "d395e37c443fedf1bf6b9a4651338b7b7de4a553"
-    ODES_REVISION = "UNRESOLVED-ODES-142-FINAL-MERGE-SHA"
-    EVIDENCE_PACK_REVISION = "UNRESOLVED-PACK-65-FINAL-MERGE-SHA"
+    ODES_REVISION = "77fd7a1cb1dd7a2dbc9ac3c02538a617056688ae"
+    EVIDENCE_PACK_REVISION = "96f5f2e126a9c27a75716658d4d2e85baf94b40b"
 elif RUNTIME_COMPATIBILITY_PROFILE != "persistence-v1":
     raise RuntimeError("unsupported GAX runtime compatibility profile")
 

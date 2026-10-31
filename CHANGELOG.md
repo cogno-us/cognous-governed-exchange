@@ -1,6 +1,6 @@
-## Current-stack profile r2, preparation only (31 October 2026)
+## Current-stack profile r2 (31 October 2026)
 
-- Experimental exchange, NOT FOR MERGE. Adds the compatibility profile `security-runtime-current-20261031-r2` beside the unchanged `security-runtime-current-20261031`. It selects control plane `b19c47dd`, runtime `f7a55e2a`, manifest `fa170815`, Replay bundle `d395e37c`; the ODES and Evidence Pack revisions are explicit UNRESOLVED placeholders, so the strict source-identity check refuses the profile (fail-closed) until the final merged revisions replace them. No enforcement logic, default or other profile changes.
+- Adds the compatibility profile `security-runtime-current-20261031-r2` beside the unchanged `security-runtime-current-20261031` (still bound to the tuple at `05ba99ba`). Exact tuple: control plane `b19c47ddd020409d24e52e70b11359c46265edbb`, runtime `f7a55e2a8494801e49193f9f46935f0a971c248d`, action manifest `fa170815ef96a54c233d0dd9da821b60debabf8b`, Replay bundle `d395e37c443fedf1bf6b9a4651338b7b7de4a553`, ODES `77fd7a1cb1dd7a2dbc9ac3c02538a617056688ae` (merge of PR 142), Evidence Pack `96f5f2e126a9c27a75716658d4d2e85baf94b40b` (merge of PR 65). Registered as a security runtime profile and a strict-source profile, so the trusted runtime-authority configuration is required and every candidate source is verified against these exact revisions before import. Provisional development pin, not qualified; no enforcement logic, default, wildcard or fallback changes, and the other profiles are byte-unchanged. Hardening against `refs/replace` is not included.
 
 ## Programme 2 source tuple re-tied to the post-wave-7 mains (22 October 2026)
 

@@ -669,12 +669,11 @@ def test_real_module_refuses_a_tampered_checkout(current_module):
     assert not marker.exists()
 
 
-# S2 r2 PREP (Issue #254; NOT FOR MERGE until ODES #142 / Pack #65 are final) ------------------------------------------------
-# New profile `security-runtime-current-20261031-r2`, registered BESIDE the original `security-runtime-current-20261031`
-# (kept untouched). Controls A-P. ODES/Pack are explicit UNRESOLVED placeholders that can never equal a commit id, so the strict
-# check refuses the profile until they are replaced. Every control reads R2_PINS (the single table); the final re-cut edits one
-# constant per component in the module and the matching R2_PINS row, and the tests adapt: "unresolved" controls apply while a
-# row is a placeholder, "resolved" controls apply once it is a 40-hex commit id.
+# S2 r2 profile (Issue #254) ------------------------------------------------------------------------------------------------
+# Profile `security-runtime-current-20261031-r2`, registered BESIDE the original `security-runtime-current-20261031`
+# (kept untouched). Controls A-P. Every control reads R2_PINS (the single table), which holds the exact merged revisions
+# (ODES 77fd7a1c, Evidence Pack 96f5f2e1). The "unresolved" controls skip only if a row is ever a non-commit placeholder;
+# with all rows resolved the "resolved" controls apply.
 
 R2_PROFILE = "security-runtime-current-20261031-r2"
 R2_PINS = {
@@ -682,8 +681,8 @@ R2_PINS = {
     "MOLTBOT_REVISION": "f7a55e2a8494801e49193f9f46935f0a971c248d",
     "MANIFEST_REVISION": "fa170815ef96a54c233d0dd9da821b60debabf8b",
     "REPLAY_REVISION": "d395e37c443fedf1bf6b9a4651338b7b7de4a553",
-    "ODES_REVISION": "UNRESOLVED-ODES-142-FINAL-MERGE-SHA",
-    "EVIDENCE_PACK_REVISION": "UNRESOLVED-PACK-65-FINAL-MERGE-SHA",
+    "ODES_REVISION": "77fd7a1cb1dd7a2dbc9ac3c02538a617056688ae",
+    "EVIDENCE_PACK_REVISION": "96f5f2e126a9c27a75716658d4d2e85baf94b40b",
 }
 ORIGINAL_BLOCK_SHA256 = "e734dadbf1a54cb05e8e434b8555b72b307513860a0d10931664e1b3318da4c7"  # lines of the original profile's elif block at 05ba99ba
 ORIGINAL_PR62_HEAD = "05ba99ba5458d5b03da36c1a8a20f239f6fbf8b6"

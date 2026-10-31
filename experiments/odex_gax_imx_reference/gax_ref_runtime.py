@@ -95,11 +95,38 @@ elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-p2-20261018":
     REPLAY_REVISION = "028f63d1c001f99580583888fa4b4e46d77a267b"
     ODES_REVISION = "e86a25a1d660e74533337d38744e2934200a50ae"
     EVIDENCE_PACK_REVISION = "a3ebbb90559a44a88855139a182649d3792bb1ca"
+elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-current-20261031":
+    # Current-stack generation (OCS-SECURITY-EXCHANGE-01): the exact current integrated heads of the five source-verified
+    # components plus the Manifest. Added beside P2, P4 and F5b, which are kept unchanged so retained evidence stays
+    # reproducible. Exact revisions only (no ranges, no wildcards); selected only by naming this profile. It records which
+    # tuple the strict source-identity check accepts; it does not certify the tuple and changes no default. The migrated
+    # OCS Registry (cogno-us/cognous-ocs-registry 6b96a9a6) is identified by the qualification configuration and is NOT
+    # consumed or verified by the Exchange.
+    CP_REVISION = "b19c47ddd020409d24e52e70b11359c46265edbb"
+    MOLTBOT_REVISION = "f7a55e2a8494801e49193f9f46935f0a971c248d"
+    MANIFEST_REVISION = "fa170815ef96a54c233d0dd9da821b60debabf8b"
+    REPLAY_REVISION = "40012b8c174c6f25685bd5d9bc93ff46cc9a5842"
+    ODES_REVISION = "1a5e1d300250d832e611633f0bf8f762e398c0ec"
+    EVIDENCE_PACK_REVISION = "7b9511f2c6d56d424f17b078826594abd29f6c96"
+elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-current-20261031-r2":
+    # Re-cut of the current-stack generation as a NEW profile, added beside "security-runtime-current-20261031" (kept
+    # byte-unchanged; one name never denotes two tuples). Exact revisions only (no ranges, no wildcards): Replay d395e37c,
+    # ODES 77fd7a1c (merge of PR #142) and Evidence Pack 96f5f2e1 (merge of PR #65), with the Control Plane, Runtime and
+    # Manifest values of the original profile. It records which tuple the strict source-identity check accepts; it does
+    # not certify the tuple and changes no default. No other profile is affected; no permissive fallback.
+    # KNOWN RESIDUAL (unhardened): git replace refs (refs/replace) in a candidate checkout are not neutralised or
+    # rejected by the source-identity check. This is a known, unhardened limitation; this comment attaches no behaviour.
+    CP_REVISION = "b19c47ddd020409d24e52e70b11359c46265edbb"
+    MOLTBOT_REVISION = "f7a55e2a8494801e49193f9f46935f0a971c248d"
+    MANIFEST_REVISION = "fa170815ef96a54c233d0dd9da821b60debabf8b"
+    REPLAY_REVISION = "d395e37c443fedf1bf6b9a4651338b7b7de4a553"
+    ODES_REVISION = "77fd7a1cb1dd7a2dbc9ac3c02538a617056688ae"
+    EVIDENCE_PACK_REVISION = "96f5f2e126a9c27a75716658d4d2e85baf94b40b"
 elif RUNTIME_COMPATIBILITY_PROFILE != "persistence-v1":
     raise RuntimeError("unsupported GAX runtime compatibility profile")
 
 # Profiles that require trusted runtime-authority configuration.
-SECURITY_RUNTIME_PROFILES = frozenset({"security-runtime-candidate-20261016", "security-runtime-f5b-20261016", "security-runtime-p4-20261017", "security-runtime-p2-20261018"})
+SECURITY_RUNTIME_PROFILES = frozenset({"security-runtime-candidate-20261016", "security-runtime-f5b-20261016", "security-runtime-p4-20261017", "security-runtime-p2-20261018", "security-runtime-current-20261031", "security-runtime-current-20261031-r2"})
 # Profiles whose candidate sources are verified before import.
 STRICT_SOURCE_PROFILES = frozenset({"typed-refusal-candidate-20261015", *SECURITY_RUNTIME_PROFILES})
 

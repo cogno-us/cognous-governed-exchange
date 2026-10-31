@@ -114,6 +114,8 @@ elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-current-20261031-r2":
     # ODES 77fd7a1c (merge of PR #142) and Evidence Pack 96f5f2e1 (merge of PR #65), with the Control Plane, Runtime and
     # Manifest values of the original profile. It records which tuple the strict source-identity check accepts; it does
     # not certify the tuple and changes no default. No other profile is affected; no permissive fallback.
+    # KNOWN RESIDUAL (unhardened): git replace refs (refs/replace) in a candidate checkout are not neutralised or
+    # rejected by the source-identity check. This is a known, unhardened limitation; this comment attaches no behaviour.
     CP_REVISION = "b19c47ddd020409d24e52e70b11359c46265edbb"
     MOLTBOT_REVISION = "f7a55e2a8494801e49193f9f46935f0a971c248d"
     MANIFEST_REVISION = "fa170815ef96a54c233d0dd9da821b60debabf8b"

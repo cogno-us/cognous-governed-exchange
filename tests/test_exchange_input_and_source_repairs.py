@@ -759,6 +759,29 @@ def test_r2_A_missing_profile_registration_is_refused(monkeypatch):
         _load_source(monkeypatch, RUNTIME_SOURCE[:start] + RUNTIME_SOURCE[end:])
 
 
+# Independent anchors for the shipped pins. These literals are typed here from the architect-verified list and deliberately do NOT
+# derive from R2_PINS or from the module, so a typo applied identically to gax_ref_runtime.py and R2_PINS cannot pass.
+ARCHITECT_VERIFIED_R2_PINS = {
+    "CP_REVISION": "b19c47ddd020409d24e52e70b11359c46265edbb",
+    "MOLTBOT_REVISION": "f7a55e2a8494801e49193f9f46935f0a971c248d",
+    "MANIFEST_REVISION": "fa170815ef96a54c233d0dd9da821b60debabf8b",
+    "REPLAY_REVISION": "d395e37c443fedf1bf6b9a4651338b7b7de4a553",
+    "ODES_REVISION": "77fd7a1cb1dd7a2dbc9ac3c02538a617056688ae",
+    "EVIDENCE_PACK_REVISION": "96f5f2e126a9c27a75716658d4d2e85baf94b40b",
+}
+
+
+def test_r2_anchor_shipped_module_constants_equal_the_architect_verified_literals(monkeypatch):
+    module = _load_with_profile(monkeypatch, R2_PROFILE)  # shipped module, r2 profile, no pin overriding
+    assert module.RUNTIME_COMPATIBILITY_PROFILE == R2_PROFILE
+    assert {name: getattr(module, name) for name in PINS} == ARCHITECT_VERIFIED_R2_PINS
+    assert all(_is_commit_id(v) for v in ARCHITECT_VERIFIED_R2_PINS.values())
+
+
+def test_r2_anchor_pin_table_copy_equals_the_architect_verified_literals():
+    assert R2_PINS == ARCHITECT_VERIFIED_R2_PINS
+
+
 # B: missing strict-profile membership (both gate sets are individually required)
 @pytest.mark.parametrize("gate", ["SECURITY_RUNTIME_PROFILES", "STRICT_SOURCE_PROFILES"])
 def test_r2_B_missing_gate_membership_is_detected(monkeypatch, gate):
@@ -769,8 +792,10 @@ def test_r2_B_missing_gate_membership_is_detected(monkeypatch, gate):
     problems = _registration_problems(module)
     assert "missing SECURITY_RUNTIME_PROFILES membership" in problems
     assert "missing STRICT_SOURCE_PROFILES membership" in problems
-    assert _registration_problems(_load_with_profile(monkeypatch, R2_PROFILE)) == []  # the shipped module is clean
-    assert gate in ("SECURITY_RUNTIME_PROFILES", "STRICT_SOURCE_PROFILES")
+    assert R2_PROFILE not in getattr(module, gate)  # the named gate set really lacks the entry in the mutated module
+    shipped = _load_with_profile(monkeypatch, R2_PROFILE)
+    assert _registration_problems(shipped) == []  # the shipped module is clean
+    assert R2_PROFILE in getattr(shipped, gate)
 
 
 def test_r2_B_strict_membership_alone_is_not_enough_for_security_options(monkeypatch):
@@ -908,7 +933,7 @@ def test_r2_M_missing_source_identity_is_refused(r2_module, monkeypatch, const, 
     module, _, _, _, _, _, align_all = r2_module
     align_all()
     monkeypatch.setattr(module, const, missing)
-    with pytest.raises(RuntimeError, match="candidate source identity mismatch"):
+    with pytest.raises(RuntimeError, match=f"candidate source identity mismatch: {module_name}"):
         module.load_executor_runtime()
 
 
@@ -922,7 +947,7 @@ def test_r2_M_missing_pin_constant_is_refused(r2_module, monkeypatch):
 
 # N: tampered profile contents (the source text of the profile block, and the checkout contents)
 @pytest.mark.parametrize("const", PINS)
-def test_r2_N_tampered_profile_pin_in_source_is_detected_against_the_table(monkeypatch, const):
+def test_r2_N_tampered_profile_pin_in_source_is_flagged_by_the_table_comparison_helper(monkeypatch, const):
     start = RUNTIME_SOURCE.index('elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-current-20261031-r2":')
     end = RUNTIME_SOURCE.index('elif RUNTIME_COMPATIBILITY_PROFILE != "persistence-v1":')
     block = RUNTIME_SOURCE[start:end]
@@ -961,8 +986,8 @@ def test_r2_O_historical_profile_does_not_carry_the_r2_tuple(monkeypatch, profil
 
 @pytest.mark.parametrize("profile", sorted(ALL_OTHER_PROFILES))
 @pytest.mark.parametrize("const", ["REPLAY_REVISION", "ODES_REVISION", "EVIDENCE_PACK_REVISION"])
-def test_r2_O_historical_profile_refuses_a_checkout_at_the_r2_revision(monkeypatch, profile, const):
-    # a checkout whose identity is the r2 revision is a mismatch under the historical pin (name-only selection does not substitute)
+def test_r2_O_historical_profile_pin_for_each_recut_component_is_not_the_r2_revision(monkeypatch, profile, const):
+    # table-level check only (the refusal itself is exercised by the F-K, L and P controls): the historical pin differs from the r2 revision
     module = _load_with_profile(monkeypatch, profile)
     assert getattr(module, const) != R2_PINS[const]
 

@@ -588,3 +588,82 @@ def test_current_profile_refuses_a_manifest_at_another_revision(current_checkout
     runtime.MANIFEST_REVISION = HISTORICAL_PROFILES["security-runtime-f5b-20261016"]["MANIFEST_REVISION"]  # monkeypatch undoes it
     with pytest.raises(RuntimeError, match="candidate source identity mismatch"):
         runtime.load_executor_runtime()
+
+
+# S2 prep (Issue #254): real-module hardening of the current-profile tests -------------------------------------------------
+# Tests only. The fixtures above monkeypatch the pins on the already-imported module, so they pass even if the profile branch,
+# the frozenset entries or the literal pins were wrong. These load a fresh copy of the real gax_ref_runtime under the
+# profile (the `_load_with_profile` mechanism), assert the gates, spy that the strict check really runs, and read every
+# expected pin from the single CURRENT_PINS table (a re-cut edits that table and the six module constants only).
+
+@pytest.fixture
+def current_module(current_checkouts, monkeypatch):
+    roots, revisions, marker = current_checkouts
+    module = _load_with_profile(monkeypatch, CURRENT_PROFILE)  # raises if the profile name is no longer recognised
+    for const, key in (("CP_REVISION", "control_plane"), ("MOLTBOT_REVISION", "runtime"), ("REPLAY_REVISION", "replay"),
+                       ("ODES_REVISION", "odes"), ("EVIDENCE_PACK_REVISION", "pack"), ("MANIFEST_REVISION", "manifest")):
+        monkeypatch.setattr(module, const, revisions[key])
+    calls = []
+    real_verify = module._verify_refusal_profile_sources
+
+    def spy(*args, **kwargs):
+        calls.append(args)
+        return real_verify(*args, **kwargs)
+
+    monkeypatch.setattr(module, "_verify_refusal_profile_sources", spy)
+    return module, roots, revisions, marker, calls
+
+
+@pytest.mark.parametrize("const", PINS)
+def test_current_profile_pin_is_the_exact_table_value(monkeypatch, const):
+    module = _load_with_profile(monkeypatch, CURRENT_PROFILE)
+    value = getattr(module, const)
+    assert value == CURRENT_PINS[const]
+    assert len(value) == 40 and set(value) <= set("0123456789abcdef")
+
+
+def test_current_profile_table_covers_exactly_the_six_pins():
+    assert set(CURRENT_PINS) == set(PINS) and len(set(CURRENT_PINS.values())) == len(PINS)
+
+
+def test_current_profile_is_gated_by_both_frozensets_on_the_real_module(monkeypatch):
+    module = _load_with_profile(monkeypatch, CURRENT_PROFILE)
+    assert module.RUNTIME_COMPATIBILITY_PROFILE == CURRENT_PROFILE
+    assert CURRENT_PROFILE in module.SECURITY_RUNTIME_PROFILES
+    assert CURRENT_PROFILE in module.STRICT_SOURCE_PROFILES
+
+
+def test_real_module_runs_the_strict_check_and_accepts_the_correct_tuple(current_module):
+    module, roots, _, marker, calls = current_module
+    loaded = module.load_executor_runtime()
+    assert len(calls) == 1  # the strict source-identity check actually ran (not silently skipped)
+    assert Path(loaded["cp"].__file__).resolve() == (roots["control_plane"] / "src/agent_control_plane/bounded.py").resolve()
+    assert not marker.exists()
+
+
+@pytest.mark.parametrize("const, module_name", [("CP_REVISION", "agent_control_plane.bounded"),
+                                                ("REPLAY_REVISION", "agent_replay_bundle.importers"),
+                                                ("ODES_REVISION", "odes.exporter"),
+                                                ("EVIDENCE_PACK_REVISION", "agent_governance_evidence_pack.importer")])
+def test_real_module_raises_from_the_strict_check_on_a_mismatched_revision(current_module, monkeypatch, const, module_name):
+    module, _, _, _, calls = current_module
+    monkeypatch.setattr(module, const, CURRENT_PINS[const])  # the real current pin is not the fixture's checkout commit
+    with pytest.raises(RuntimeError, match=f"candidate source identity mismatch: {module_name}"):
+        module.load_executor_runtime()
+    assert len(calls) == 1
+
+
+def test_real_module_refuses_a_manifest_at_another_revision(current_module, monkeypatch):
+    module, _, _, _, calls = current_module
+    monkeypatch.setattr(module, "MANIFEST_REVISION", CURRENT_PINS["MANIFEST_REVISION"])
+    with pytest.raises(RuntimeError, match="candidate source identity mismatch"):
+        module.load_executor_runtime()
+    assert len(calls) == 1
+
+
+def test_real_module_refuses_a_tampered_checkout(current_module):
+    module, roots, _, marker, _ = current_module
+    (roots["replay"] / "src/agent_replay_bundle/importers.py").write_text(_planted(marker))
+    with pytest.raises(RuntimeError, match="candidate source identity mismatch: agent_replay_bundle.importers"):
+        module.load_executor_runtime()
+    assert not marker.exists()

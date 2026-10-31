@@ -448,3 +448,143 @@ def test_matching_replay_bundle_digest_is_verified(stub_proposal):
 def test_absent_replay_bundle_digest_is_disclosed_as_not_verified(stub_proposal):
     out = base.assess_message(governed("m-none"), {}, registry(), evaluation_time=EVAL)
     assert out["stages"]["evidence_digest"].startswith("not_verified")
+
+
+# OCS-SECURITY-EXCHANGE-01: current-stack compatibility profile ------------------------------------------------------------
+# Additions only: no existing assertion above is changed. The profile names the exact tuple the strict source-identity check
+# accepts; it changes no enforcement logic, no default, and certifies nothing.
+
+CURRENT_PROFILE = "security-runtime-current-20261031"
+CURRENT_PINS = {
+    "CP_REVISION": "b19c47ddd020409d24e52e70b11359c46265edbb",
+    "MOLTBOT_REVISION": "f7a55e2a8494801e49193f9f46935f0a971c248d",
+    "MANIFEST_REVISION": "fa170815ef96a54c233d0dd9da821b60debabf8b",
+    "REPLAY_REVISION": "40012b8c174c6f25685bd5d9bc93ff46cc9a5842",
+    "ODES_REVISION": "1a5e1d300250d832e611633f0bf8f762e398c0ec",
+    "EVIDENCE_PACK_REVISION": "7b9511f2c6d56d424f17b078826594abd29f6c96",
+}
+HISTORICAL_PROFILES = {
+    "security-runtime-candidate-20261016": RETAINED_SECURITY_PINS,
+    "security-runtime-f5b-20261016": F5B_PINS,
+    "security-runtime-p4-20261017": P4_PINS,
+    "security-runtime-p2-20261018": P2_PINS,
+}
+
+
+def test_current_profile_selects_the_exact_tuple_and_requires_trusted_configuration(monkeypatch):
+    module = _load_with_profile(monkeypatch, CURRENT_PROFILE)
+    assert {name: getattr(module, name) for name in PINS} == CURRENT_PINS
+    assert all(len(v) == 40 and set(v) <= set("0123456789abcdef") for v in CURRENT_PINS.values())  # exact commits, no ranges or wildcards
+    assert CURRENT_PROFILE in module.SECURITY_RUNTIME_PROFILES and CURRENT_PROFILE in module.STRICT_SOURCE_PROFILES
+    with pytest.raises(ValueError, match="requires trusted runtime_authority_profile"):
+        module._workflow_options(None)
+
+
+@pytest.mark.parametrize("profile, pins", sorted(HISTORICAL_PROFILES.items()))
+def test_historical_profiles_keep_their_original_pins_and_do_not_accept_the_current_tuple(monkeypatch, profile, pins):
+    module = _load_with_profile(monkeypatch, profile)
+    assert {name: getattr(module, name) for name in PINS} == pins
+    for name in ("CP_REVISION", "MOLTBOT_REVISION", "REPLAY_REVISION", "ODES_REVISION", "EVIDENCE_PACK_REVISION"):
+        assert getattr(module, name) != CURRENT_PINS[name]  # a historical profile is never silently re-tied to the current heads
+
+
+def test_default_profile_is_unchanged_and_not_the_current_profile(monkeypatch):
+    monkeypatch.delenv("GAX_RUNTIME_COMPATIBILITY_PROFILE", raising=False)
+    spec = importlib.util.spec_from_file_location("experiments.odex_gax_imx_reference._default_probe", runtime.__file__)
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, "experiments.odex_gax_imx_reference._default_probe", module)
+    spec.loader.exec_module(module)
+    assert module.RUNTIME_COMPATIBILITY_PROFILE == "persistence-v1"
+    assert module.RUNTIME_COMPATIBILITY_PROFILE not in module.STRICT_SOURCE_PROFILES
+    assert CURRENT_PROFILE in module.STRICT_SOURCE_PROFILES  # selectable only by explicit name
+
+
+@pytest.mark.parametrize("profile", [CURRENT_PROFILE + "x", "security-runtime-current-20261101", "security-runtime-current-*",
+                                     "security-runtime-*", "*", "", CURRENT_PROFILE.upper(), " " + CURRENT_PROFILE])
+def test_unknown_or_wildcard_profile_names_are_refused(monkeypatch, profile):
+    with pytest.raises(RuntimeError, match="unsupported GAX runtime compatibility profile"):
+        _load_with_profile(monkeypatch, profile)
+
+
+@pytest.fixture
+def current_checkouts(tmp_path, monkeypatch):
+    """Throwaway checkouts selected under the CURRENT profile; the pinned constants are the fixture's own commits, so the
+    check is exercised exactly as for any strict profile (the fake_checkouts fixture runs the same machinery for every profile)."""
+    marker = tmp_path / "planted-code-ran"
+    roots, revisions = {}, {}
+    for key, (package, module) in MODULES.items():
+        body = "import colorsys\nPLANTED = False\n"
+        if key == "runtime":
+            body += ("EXECUTOR_PRODUCER_PROFILE_ID = 'urn:cognous:profiles:moltbot-safe-executor-producer'\n"
+                     "EXECUTOR_PRODUCER_PROFILE_VERSION = '2.0.0'\n"
+                     "PinnedControlPlaneExecutor = DurableRefundDestination = ExecutionEnvelope = None\n"
+                     "ExecutionOperation = LocalExecutionPolicy = commitment = export_execution_artifacts = None\n")
+        roots[key] = tmp_path / key
+        revisions[key] = _repo(roots[key], {f"{package}/__init__.py": "", f"{package}/{module}.py": body})
+    manifest_root = tmp_path / "manifest"
+    revisions["manifest"] = _repo(manifest_root, {"examples/m.json": "{}"})
+    for key in ("replay", "odes", "pack"):
+        monkeypatch.syspath_prepend(str(roots[key] / "src"))
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    for name in [m for m in sys.modules if m.split(".")[0] in TOP_LEVEL]:
+        monkeypatch.delitem(sys.modules, name)
+    monkeypatch.setattr(runtime, "RUNTIME_COMPATIBILITY_PROFILE", CURRENT_PROFILE)
+    for const, key in (("CP_REVISION", "control_plane"), ("MOLTBOT_REVISION", "runtime"), ("REPLAY_REVISION", "replay"),
+                       ("ODES_REVISION", "odes"), ("EVIDENCE_PACK_REVISION", "pack"), ("MANIFEST_REVISION", "manifest")):
+        monkeypatch.setattr(runtime, const, revisions[key])
+    monkeypatch.setenv("MOLTBOT_SAFE_CONTROL_PLANE_ROOT", str(roots["control_plane"]))
+    monkeypatch.setenv("MOLTBOT_SAFE_ROOT", str(roots["runtime"]))
+    monkeypatch.setenv("UPSTREAM_MANIFEST_EXAMPLE", str(manifest_root / "examples/m.json"))
+    yield roots, revisions, marker
+    for name in [m for m in sys.modules if m.split(".")[0] in TOP_LEVEL]:
+        sys.modules.pop(name, None)
+
+
+def test_current_profile_accepts_the_correct_tuple(current_checkouts):
+    roots, _, marker = current_checkouts
+    loaded = runtime.load_executor_runtime()
+    assert Path(loaded["cp"].__file__).resolve() == (roots["control_plane"] / "src/agent_control_plane/bounded.py").resolve()
+    assert not marker.exists()
+
+
+@pytest.mark.parametrize("const, module_name", [("CP_REVISION", "agent_control_plane.bounded"),
+                                                ("REPLAY_REVISION", "agent_replay_bundle.importers"),
+                                                ("ODES_REVISION", "odes.exporter"),
+                                                ("EVIDENCE_PACK_REVISION", "agent_governance_evidence_pack.importer")])
+def test_current_profile_refuses_a_mixed_tuple(current_checkouts, monkeypatch, const, module_name):
+    # one component at another profile's revision while the rest match: refused, naming the mismatched module
+    monkeypatch.setattr(runtime, const, HISTORICAL_PROFILES["security-runtime-p2-20261018"][const])
+    with pytest.raises(RuntimeError, match=f"candidate source identity mismatch: {module_name}"):
+        runtime.load_executor_runtime()
+
+
+@pytest.mark.parametrize("missing", ["", None])
+def test_current_profile_refuses_a_missing_identity(current_checkouts, monkeypatch, missing):
+    monkeypatch.setattr(runtime, "CP_REVISION", missing)
+    with pytest.raises(RuntimeError, match="candidate source identity mismatch: agent_control_plane.bounded"):
+        runtime.load_executor_runtime()
+
+
+def test_current_profile_refuses_a_substituted_revision(current_checkouts):
+    roots, _, _ = current_checkouts
+    # the checkout moves to a different commit than the pinned one (a substituted, even newer, revision)
+    (roots["odes"] / "src/odes/extra.py").write_text("X = 1\n")
+    _git(roots["odes"], "add", "-A")
+    _git(roots["odes"], "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "newer")
+    with pytest.raises(RuntimeError, match="candidate source identity mismatch: odes.exporter"):
+        runtime.load_executor_runtime()
+
+
+def test_current_profile_refuses_a_tampered_identity(current_checkouts):
+    roots, _, marker = current_checkouts
+    (roots["replay"] / "src/agent_replay_bundle/importers.py").write_text(_planted(marker))
+    with pytest.raises(RuntimeError, match="candidate source identity mismatch: agent_replay_bundle.importers"):
+        runtime.load_executor_runtime()
+    assert not marker.exists()  # refused before the tampered module executed
+
+
+def test_current_profile_refuses_a_manifest_at_another_revision(current_checkouts):
+    _, revisions, _ = current_checkouts
+    runtime.MANIFEST_REVISION = HISTORICAL_PROFILES["security-runtime-f5b-20261016"]["MANIFEST_REVISION"]  # monkeypatch undoes it
+    with pytest.raises(RuntimeError, match="candidate source identity mismatch"):
+        runtime.load_executor_runtime()

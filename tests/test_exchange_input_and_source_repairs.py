@@ -1115,3 +1115,23 @@ def test_unrelated_branches_and_tags_do_not_trip_the_replace_ref_refusal(fake_ch
     assert not runtime._checkout_source_problems(roots["replay"])
     runtime.load_executor_runtime()
     assert not marker.exists()
+
+
+@pytest.mark.parametrize("mode", ["commit", "tree", "alt-base"])
+def test_replace_ref_substitution_in_the_manifest_checkout_is_refused(current_checkouts, monkeypatch, mode):
+    # The manifest checkout is verified by its own `diff HEAD` call, outside _checkout_source_problems: only --no-replace-objects protects it.
+    roots, _, marker = current_checkouts
+    manifest_root = marker.parent / "manifest"
+    pinned = _git(manifest_root, "rev-parse", "HEAD")
+    pinned_tree = _git(manifest_root, "rev-parse", "HEAD^{tree}")
+    (manifest_root / "examples/m.json").write_text('{"substituted": true}')
+    _git(manifest_root, "add", "-A")
+    _git(manifest_root, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "substitute")
+    if mode == "alt-base":
+        monkeypatch.setenv("GIT_REPLACE_REF_BASE", "refs/alt/")
+    old, new = (pinned_tree, "HEAD^{tree}") if mode == "tree" else (pinned, "HEAD")
+    _git(manifest_root, "replace", old, _git(manifest_root, "rev-parse", new))
+    _git(manifest_root, "reset", "-q", "--soft", pinned)
+    assert _git(manifest_root, "rev-parse", "HEAD") == runtime.MANIFEST_REVISION
+    with pytest.raises(RuntimeError, match="candidate source identity mismatch: manifest"):
+        runtime.load_executor_runtime()

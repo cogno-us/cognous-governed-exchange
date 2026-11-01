@@ -116,7 +116,8 @@ elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-current-20261031-r2":
     # not certify the tuple and changes no default. No other profile is affected; no permissive fallback.
     # git replace refs (refs/replace) are neutralised (--no-replace-objects on every source-reading git call) and refused
     # in the checked checkouts. KNOWN RESIDUALS: GIT_DIR / GIT_OBJECT_DIRECTORY / GIT_ALTERNATE_OBJECT_DIRECTORIES in the
-    # environment, alternates, and shallow or graft files are not inspected; the check is not a complete source-integrity proof.
+    # environment, alternates, and shallow or graft files, git config / filter / hook injection and GIT_CONFIG_* are not inspected; the manifest
+    # checkout is protected by --no-replace-objects only (no refs/replace refusal). Not a complete source-integrity proof.
     CP_REVISION = "b19c47ddd020409d24e52e70b11359c46265edbb"
     MOLTBOT_REVISION = "f7a55e2a8494801e49193f9f46935f0a971c248d"
     MANIFEST_REVISION = "fa170815ef96a54c233d0dd9da821b60debabf8b"

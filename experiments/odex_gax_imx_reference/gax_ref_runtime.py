@@ -114,8 +114,10 @@ elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-current-20261031-r2":
     # ODES 77fd7a1c (merge of PR #142) and Evidence Pack 96f5f2e1 (merge of PR #65), with the Control Plane, Runtime and
     # Manifest values of the original profile. It records which tuple the strict source-identity check accepts; it does
     # not certify the tuple and changes no default. No other profile is affected; no permissive fallback.
-    # KNOWN RESIDUAL (unhardened): git replace refs (refs/replace) in a candidate checkout are not neutralised or
-    # rejected by the source-identity check. This is a known, unhardened limitation; this comment attaches no behaviour.
+    # git replace refs (refs/replace) are neutralised (--no-replace-objects on every source-reading git call) and refused
+    # in the checked checkouts. KNOWN RESIDUALS: GIT_DIR / GIT_OBJECT_DIRECTORY / GIT_ALTERNATE_OBJECT_DIRECTORIES in the
+    # environment, alternates, and shallow or graft files, git config / filter / hook injection and GIT_CONFIG_* are not inspected; the manifest
+    # checkout is protected by --no-replace-objects only (no refs/replace refusal). Not a complete source-integrity proof.
     CP_REVISION = "b19c47ddd020409d24e52e70b11359c46265edbb"
     MOLTBOT_REVISION = "f7a55e2a8494801e49193f9f46935f0a971c248d"
     MANIFEST_REVISION = "fa170815ef96a54c233d0dd9da821b60debabf8b"
@@ -129,6 +131,9 @@ elif RUNTIME_COMPATIBILITY_PROFILE != "persistence-v1":
 SECURITY_RUNTIME_PROFILES = frozenset({"security-runtime-candidate-20261016", "security-runtime-f5b-20261016", "security-runtime-p4-20261017", "security-runtime-p2-20261018", "security-runtime-current-20261031", "security-runtime-current-20261031-r2"})
 # Profiles whose candidate sources are verified before import.
 STRICT_SOURCE_PROFILES = frozenset({"typed-refusal-candidate-20261015", *SECURITY_RUNTIME_PROFILES})
+# Every git call that reads source objects ignores replace refs (refs/replace/*, any GIT_REPLACE_REF_BASE), so the revision
+# a check names is the object it reads. Not a complete source-integrity guarantee (see the r2 profile comment).
+_GIT = ("git", "--no-replace-objects")
 
 
 def _repo_path(env_name: str, default: str) -> Path:
@@ -159,15 +164,15 @@ def _executed_file_problems(executed: list[Path]) -> list[str]:
     problems = []
     for path in executed:
         path = Path(path).resolve()
-        top = Path(subprocess.check_output(["git", "-C", str(path.parent), "rev-parse", "--show-toplevel"],
+        top = Path(subprocess.check_output([*_GIT, "-C", str(path.parent), "rev-parse", "--show-toplevel"],
                                            text=True, timeout=10).strip()).resolve()
         rel = path.relative_to(top).as_posix()
-        for line in subprocess.check_output(["git", "-C", str(top), "ls-files", "-v", "--", rel],
+        for line in subprocess.check_output([*_GIT, "-C", str(top), "ls-files", "-v", "--", rel],
                                             text=True, timeout=10).splitlines():
             if line[:1].islower() or line[:1] == "S":
                 problems.append(f"index flag hides modifications: {rel}")
-        head_blob = subprocess.check_output(["git", "-C", str(top), "rev-parse", f"HEAD:{rel}"], text=True, timeout=10).strip()
-        disk_blob = subprocess.check_output(["git", "-C", str(top), "hash-object", "--", rel], text=True, timeout=10).strip()
+        head_blob = subprocess.check_output([*_GIT, "-C", str(top), "rev-parse", f"HEAD:{rel}"], text=True, timeout=10).strip()
+        disk_blob = subprocess.check_output([*_GIT, "-C", str(top), "hash-object", "--", rel], text=True, timeout=10).strip()
         if head_blob != disk_blob:
             problems.append(f"content differs from the revision: {rel}")
     return problems
@@ -181,10 +186,12 @@ def _checkout_source_problems(top: Path) -> list[str]:
     recorded at HEAD. A tracked entry that cannot be compared this way (a submodule, a path with a newline) is refused.
     """
     def git(*args, **kwargs):
-        return subprocess.run(["git", "-C", str(top), *args], check=True, text=True, capture_output=True,
+        return subprocess.run([*_GIT, "-C", str(top), *args], check=True, text=True, capture_output=True,
                               timeout=120, **kwargs).stdout
 
     problems = []
+    if git("for-each-ref", "--count=1", "refs/replace/").strip():
+        problems.append("replace refs (refs/replace) present: a replaced commit or tree would stand in for the revision")
     for line in git("ls-files", "-v", "-z").split("\0"):
         if line and (line[0].islower() or line[0] == "S"):
             problems.append(f"index flag hides modifications: {line[2:]}")
@@ -224,13 +231,13 @@ def _checkout_source_problems(top: Path) -> list[str]:
 
 def _git_source_identity(directory: Path, tracked: list[Path]) -> tuple[str, str]:
     actual = subprocess.check_output(
-        ["git", "-C", str(directory), "rev-parse", "HEAD"], text=True, timeout=10
+        [*_GIT, "-C", str(directory), "rev-parse", "HEAD"], text=True, timeout=10
     ).strip()
     changed = subprocess.check_output(
-        ["git", "-C", str(directory), "status", "--porcelain", "--untracked-files=no"],
+        [*_GIT, "-C", str(directory), "status", "--porcelain", "--untracked-files=no"],
         text=True, timeout=10,
     ).strip()
-    subprocess.run(["git", "-C", str(directory), "ls-files", "--error-unmatch", "--", *map(str, tracked)],
+    subprocess.run([*_GIT, "-C", str(directory), "ls-files", "--error-unmatch", "--", *map(str, tracked)],
                    check=True, capture_output=True, timeout=10)
     problems = _executed_file_problems(tracked)
     if problems:
@@ -247,7 +254,7 @@ def _untracked_in_package_tree(package_dir: Path) -> str:
     ``.py``. Candidate verification requires this list to be empty.
     """
     return subprocess.check_output(
-        ["git", "-C", str(package_dir), "ls-files", "--others", "--", "."],
+        [*_GIT, "-C", str(package_dir), "ls-files", "--others", "--", "."],
         text=True, timeout=10,
     ).strip()
 
@@ -281,7 +288,7 @@ def _untracked_importable_at_roots(roots: set[Path]) -> list[Path]:
     """
     found = []
     for root in sorted(roots):
-        listed = subprocess.check_output(["git", "-C", str(root), "ls-files", "-z", "--", "."],
+        listed = subprocess.check_output([*_GIT, "-C", str(root), "ls-files", "-z", "--", "."],
                                          text=True, timeout=30)
         tracked = {Path(item) for item in listed.split("\0") if item}
         tracked_tops = {item.parts[0] for item in tracked}
@@ -377,7 +384,7 @@ def _verify_refusal_profile_sources(cp_root: Path | None = None, molt_root: Path
             actual, changed = _git_source_identity(directory, executed)
             untracked = _untracked_in_package_tree(executed[0].parent)
             toplevel = Path(subprocess.check_output(
-                ["git", "-C", str(directory), "rev-parse", "--show-toplevel"], text=True, timeout=10
+                [*_GIT, "-C", str(directory), "rev-parse", "--show-toplevel"], text=True, timeout=10
             ).strip()).resolve()
         except (subprocess.CalledProcessError, OSError) as exc:
             raise RuntimeError(f"candidate source identity mismatch: {name}") from exc
@@ -409,11 +416,11 @@ def _verify_refusal_profile_sources(cp_root: Path | None = None, molt_root: Path
         if shadows:
             _refuse_untracked(name, shadows)
     manifest = Path(os.environ["UPSTREAM_MANIFEST_EXAMPLE"]).resolve()
-    actual = subprocess.check_output(["git", "-C", str(manifest.parent), "rev-parse", "HEAD"],
+    actual = subprocess.check_output([*_GIT, "-C", str(manifest.parent), "rev-parse", "HEAD"],
                                      text=True, timeout=10).strip()
-    changed = subprocess.check_output(["git", "-C", str(manifest.parent), "diff", "HEAD", "--", str(manifest)],
+    changed = subprocess.check_output([*_GIT, "-C", str(manifest.parent), "diff", "HEAD", "--", str(manifest)],
                                       text=True, timeout=10).strip()
-    subprocess.run(["git", "-C", str(manifest.parent), "ls-files", "--error-unmatch", manifest.name],
+    subprocess.run([*_GIT, "-C", str(manifest.parent), "ls-files", "--error-unmatch", manifest.name],
                    check=True, capture_output=True, timeout=10)
     if actual != MANIFEST_REVISION or changed:
         raise RuntimeError("candidate source identity mismatch: manifest")

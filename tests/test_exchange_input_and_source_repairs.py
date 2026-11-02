@@ -1052,3 +1052,86 @@ def test_r2_historical_profile_blocks_other_than_the_original_are_untouched_by_t
     # exactly two lines of the module differ from the prep base for registration: the new elif block and the frozenset entry
     for hist in ("security-runtime-p2-20261018", "security-runtime-p4-20261017", "security-runtime-f5b-20261016", "security-runtime-candidate-20261016"):
         assert RUNTIME_SOURCE.count(f'== "{hist}":') == 1
+
+
+# Replace-ref hardening (Issue #254, finding F5) -------------------------------------------------------------------------------
+# `git replace` lets a checkout whose HEAD still names the approved SHA serve a different commit/tree to every object-reading
+# git command (ls-tree, diff, status), so the revision check passes while other content is evaluated. The verifier now runs
+# git with --no-replace-objects and refuses a checkout that holds refs/replace/* refs.
+
+_EVIL_REL = "src/agent_replay_bundle/importers.py"
+
+
+def _substitute(root: Path, marker: Path, mode: str, monkeypatch) -> str:
+    """Leave `root` at the pinned commit P with planted content on disk and in the index, served as P through a replace ref."""
+    pinned = _git(root, "rev-parse", "HEAD")
+    pinned_tree = _git(root, "rev-parse", "HEAD^{tree}")
+    (root / _EVIL_REL).write_text(_planted(marker))
+    _git(root, "add", "-A")
+    _git(root, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "substitute")
+    if mode == "alt-base":
+        monkeypatch.setenv("GIT_REPLACE_REF_BASE", "refs/alt/")
+    if mode == "tree":
+        _git(root, "replace", pinned_tree, _git(root, "rev-parse", "HEAD^{tree}"))
+    else:
+        _git(root, "replace", pinned, _git(root, "rev-parse", "HEAD"))
+    _git(root, "reset", "-q", "--soft", pinned)  # HEAD names the approved SHA again; index and disk keep the planted content
+    return pinned
+
+
+@pytest.mark.parametrize("mode", ["commit", "tree", "alt-base"])
+def test_replace_ref_substitution_is_refused_before_the_substituted_code_executes(fake_checkouts, monkeypatch, mode):
+    roots, marker = fake_checkouts
+    pinned = _substitute(roots["replay"], marker, mode, monkeypatch)
+    assert _git(roots["replay"], "rev-parse", "HEAD") == pinned == runtime.REPLAY_REVISION  # the SHA check alone would pass
+    with pytest.raises(RuntimeError, match="candidate source identity mismatch: agent_replay_bundle.importers"):
+        runtime.load_executor_runtime()
+    assert not marker.exists()
+    assert "agent_replay_bundle.importers" not in sys.modules
+
+
+@pytest.mark.parametrize("mode", ["commit", "tree", "alt-base"])
+def test_replace_refs_are_not_interpreted_by_the_identity_and_blob_checks(current_checkouts, monkeypatch, mode):
+    # Independent of the refusal below: the checks that read objects must see the real commit, not the replacement.
+    roots, _, marker = current_checkouts
+    _substitute(roots["replay"], marker, mode, monkeypatch)
+    executed = [roots["replay"] / "src/agent_replay_bundle/__init__.py", roots["replay"] / _EVIL_REL]
+    _, changed = runtime._git_source_identity(roots["replay"] / "src/agent_replay_bundle", executed)
+    assert changed
+    assert runtime._executed_file_problems(executed)
+
+
+def test_checkout_with_a_replace_ref_is_reported(current_checkouts, monkeypatch):
+    roots, _, marker = current_checkouts
+    assert not [p for p in runtime._checkout_source_problems(roots["replay"]) if "replace" in p]
+    _substitute(roots["replay"], marker, "commit", monkeypatch)
+    assert any("refs/replace" in p for p in runtime._checkout_source_problems(roots["replay"]))
+
+
+def test_unrelated_branches_and_tags_do_not_trip_the_replace_ref_refusal(fake_checkouts):
+    roots, marker = fake_checkouts
+    _git(roots["replay"], "tag", "release-1")
+    _git(roots["replay"], "branch", "side")
+    assert not runtime._checkout_source_problems(roots["replay"])
+    runtime.load_executor_runtime()
+    assert not marker.exists()
+
+
+@pytest.mark.parametrize("mode", ["commit", "tree", "alt-base"])
+def test_replace_ref_substitution_in_the_manifest_checkout_is_refused(current_checkouts, monkeypatch, mode):
+    # The manifest checkout is verified by its own `diff HEAD` call, outside _checkout_source_problems: only --no-replace-objects protects it.
+    roots, _, marker = current_checkouts
+    manifest_root = marker.parent / "manifest"
+    pinned = _git(manifest_root, "rev-parse", "HEAD")
+    pinned_tree = _git(manifest_root, "rev-parse", "HEAD^{tree}")
+    (manifest_root / "examples/m.json").write_text('{"substituted": true}')
+    _git(manifest_root, "add", "-A")
+    _git(manifest_root, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "substitute")
+    if mode == "alt-base":
+        monkeypatch.setenv("GIT_REPLACE_REF_BASE", "refs/alt/")
+    old, new = (pinned_tree, "HEAD^{tree}") if mode == "tree" else (pinned, "HEAD")
+    _git(manifest_root, "replace", old, _git(manifest_root, "rev-parse", new))
+    _git(manifest_root, "reset", "-q", "--soft", pinned)
+    assert _git(manifest_root, "rev-parse", "HEAD") == runtime.MANIFEST_REVISION
+    with pytest.raises(RuntimeError, match="candidate source identity mismatch: manifest"):
+        runtime.load_executor_runtime()

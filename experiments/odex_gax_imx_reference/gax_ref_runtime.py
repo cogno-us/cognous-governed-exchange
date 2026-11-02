@@ -124,11 +124,25 @@ elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-current-20261031-r2":
     REPLAY_REVISION = "d395e37c443fedf1bf6b9a4651338b7b7de4a553"
     ODES_REVISION = "77fd7a1cb1dd7a2dbc9ac3c02538a617056688ae"
     EVIDENCE_PACK_REVISION = "96f5f2e126a9c27a75716658d4d2e85baf94b40b"
+elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-current-20261031-r3":
+    # Successor of "security-runtime-current-20261031-r2" (kept byte-unchanged; one name never denotes two tuples), added
+    # beside it. Exact revisions only (no ranges, no wildcards): Replay 6f45e288 (merge of PR #82), ODES d461f0ba (merge of
+    # PR #143) and Evidence Pack 39fecb00 (merge of PR #66), with the Control Plane, Runtime and Manifest values of r2.
+    # PROVISIONAL DEVELOPMENT PINS, NOT ADOPTED. It records which tuple the strict source-identity check accepts; it does
+    # not certify the tuple, makes no Registry authentication claim and changes no default. No other profile is affected;
+    # no permissive fallback. The r2 profile comment on git replace refs (refs/replace) and its known residuals applies
+    # unchanged to every strict profile, r3 included.
+    CP_REVISION = "b19c47ddd020409d24e52e70b11359c46265edbb"
+    MOLTBOT_REVISION = "f7a55e2a8494801e49193f9f46935f0a971c248d"
+    MANIFEST_REVISION = "fa170815ef96a54c233d0dd9da821b60debabf8b"
+    REPLAY_REVISION = "6f45e288ae37ec7e7712f9296760927d2d843bba"
+    ODES_REVISION = "d461f0ba3feccef3593ab6efdbf930569d669767"
+    EVIDENCE_PACK_REVISION = "39fecb004f3d4c4e87673d79d8d9399314f551e4"
 elif RUNTIME_COMPATIBILITY_PROFILE != "persistence-v1":
     raise RuntimeError("unsupported GAX runtime compatibility profile")
 
 # Profiles that require trusted runtime-authority configuration.
-SECURITY_RUNTIME_PROFILES = frozenset({"security-runtime-candidate-20261016", "security-runtime-f5b-20261016", "security-runtime-p4-20261017", "security-runtime-p2-20261018", "security-runtime-current-20261031", "security-runtime-current-20261031-r2"})
+SECURITY_RUNTIME_PROFILES = frozenset({"security-runtime-candidate-20261016", "security-runtime-f5b-20261016", "security-runtime-p4-20261017", "security-runtime-p2-20261018", "security-runtime-current-20261031", "security-runtime-current-20261031-r2", "security-runtime-current-20261031-r3"})
 # Profiles whose candidate sources are verified before import.
 STRICT_SOURCE_PROFILES = frozenset({"typed-refusal-candidate-20261015", *SECURITY_RUNTIME_PROFILES})
 # Every git call that reads source objects ignores replace refs (refs/replace/*, any GIT_REPLACE_REF_BASE), so the revision

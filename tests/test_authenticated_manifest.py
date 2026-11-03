@@ -212,6 +212,41 @@ def test_run_actual_outcome_reads_no_manifest_before_verification(world, monkeyp
     assert kind == "refused" and "candidate source identity mismatch" in str(val)   # the dirty file is refused up front
 
 
+def test_run_actual_outcome_orders_verification_before_any_manifest_access(world, monkeypatch):
+    """Pins the ordering itself: no manifest accessor and no read of the mutable path precedes the completed verification,
+    and the workflow consumes the authenticated manifest."""
+    if world["profile"] != TYPED:
+        pytest.skip("run_actual_outcome calls run_exchange without runtime_authority_profile: usable only under the typed-refusal profile")
+    mf = world["manifest_file"]
+    bundle_file = world["tmp"] / "bundle.json"
+    bundle_file.write_text(json.dumps(BUNDLE))
+    monkeypatch.setenv("UPSTREAM_REPLAY_SUCCESS_EXAMPLE", str(bundle_file))
+    events = []
+    real_load, real_manifest, real_read = runtime.load_executor_runtime, runtime._manifest, Path.read_text
+
+    def load():
+        result = real_load()
+        events.append("verified")
+        return result
+
+    def manifest():
+        events.append("manifest-accessor")
+        return real_manifest()
+
+    def read_text(self, *a, **k):
+        if Path(self) == mf:
+            events.append("mutable-path-read")
+        return real_read(self, *a, **k)
+
+    monkeypatch.setattr(runtime, "load_executor_runtime", load)
+    monkeypatch.setattr(runtime, "_manifest", manifest)
+    monkeypatch.setattr(Path, "read_text", read_text)
+    kind, val = consumed_by_workflow(lambda: runtime.run_actual_outcome(world["tmp"], "success"))
+    assert events and events[0] == "verified", events
+    assert "mutable-path-read" not in events, events
+    assert kind == "consumed" and val == GOOD, (kind, val)
+
+
 def test_run_demo_manifest_argument_is_only_a_compatibility_input(world):
     if world["profile"] != TYPED:
         pytest.skip("run_demo calls run_exchange without runtime_authority_profile: usable only under the typed-refusal profile")
@@ -248,3 +283,16 @@ def test_odes_export_helper_refuses_a_foreign_manifest(world2, monkeypatch):
         runtime.export_odes_reference(EVIL, {})
     exported = runtime.export_odes_reference(dict(GOOD), {})
     assert exported["odes_package"]["seen"] == GOOD
+
+
+def test_symlink_inside_the_manifest_checkout_retargeted_to_another_tracked_file_is_refused(world2):
+    """N1: realpath used to turn m.json -> other.json into the path examples/other.json, which is also pinned."""
+    root = world2["mroot"]
+    (root / "examples/other.json").write_text(GOOD_MANIFEST)
+    git(root, "add", "-A")
+    git(root, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "other")
+    rev = git(root, "rev-parse", "HEAD")
+    (root / "examples/m.json").unlink()
+    (root / "examples/m.json").symlink_to("other.json")
+    with pytest.raises(auth.SourceAuthenticationError, match="symlink"):
+        auth.authenticate_manifest(root / "examples/m.json", rev)

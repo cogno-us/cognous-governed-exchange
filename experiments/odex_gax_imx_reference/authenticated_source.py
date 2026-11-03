@@ -58,10 +58,10 @@ class SourceAuthenticationError(ValueError):
 # Bounds. Sized from the real pinned components (largest: ODES, ~1.5k files / ~20 MiB / largest blob ~150 KiB) with
 # headroom; they are limits on hostile object databases, not Git's own limits.
 # ---------------------------------------------------------------------------------------------------------------------
-MAX_OBJECT_SIZE = 16 * 1024 * 1024   # a pinned component may carry large fixtures; per-object, still bounded
+MAX_OBJECT_SIZE = 8 * 1024 * 1024   # largest r2-tuple blob is ~150 KB; the typed-refusal runtime blob exceeded 1 MiB (size unmeasured)
 MAX_COMPRESSED = MAX_OBJECT_SIZE + 256 * 1024
-MAX_TOTAL_BYTES = 256 * 1024 * 1024
-MAX_WORK_BYTES = 1024 * 1024 * 1024
+MAX_TOTAL_BYTES = 192 * 1024 * 1024
+MAX_WORK_BYTES = 256 * 1024 * 1024
 MAX_OBJECTS = 20_000
 MAX_TREE_ENTRIES = 4096
 MAX_TOTAL_TREE_ENTRIES = 20_000
@@ -536,11 +536,12 @@ def authenticate_commit(root: Path, commit: str, *, _store: _ObjectStore | None 
     while pending:
         prefix, oid = pending.pop()
         if oid in payloads:
-            raise ValueError("tree object referenced twice")
-        if len(payloads) >= MAX_TREES:
-            raise ValueError("tree is too large")
-        data = _store.read(oid, "tree")
-        payloads[oid] = data
+            data = payloads[oid]          # identical directories share one tree object; every visit is still counted
+        else:
+            if len(payloads) >= MAX_TREES:
+                raise ValueError("tree is too large")
+            data = _store.read(oid, "tree")
+            payloads[oid] = data
         entries = _parse_tree(data)
         total_entries += len(entries)
         if len(entries) > MAX_TREE_ENTRIES or total_entries > MAX_TOTAL_TREE_ENTRIES:
@@ -602,9 +603,12 @@ class Materialized(NamedTuple):
 _LOCK = threading.RLock()
 _ROOT: list[Path] = []
 _BY_COMMIT: dict[str, Materialized] = {}
+_OWNER_PID = os.getpid()
 
 
 def _cleanup() -> None:
+    if os.getpid() != _OWNER_PID:      # a forked child must not delete the parent's authenticated copy
+        return
     for path in _ROOT:
         for here, dirnames, _ in os.walk(path):
             for name in dirnames:
@@ -1111,9 +1115,28 @@ def authenticate_manifest(path: os.PathLike | str, revision: str, *, expected_sh
     says) but is not the source of the returned object. ``expected_sha256`` (``sha256:<hex>`` of the raw bytes), when given,
     is an additional deployment binding.
     """
-    real = Path(os.path.realpath(path))
-    root = find_git_root(real)
-    rel = real.relative_to(root).as_posix()
+    lexical = Path(os.path.abspath(path))
+    root = None
+    for candidate in [lexical, *list(lexical.parents)[:GIT_LOOKUP_LEVELS]]:
+        if (candidate / ".git").exists() or (candidate / ".git").is_symlink():
+            root = candidate
+            break
+    if root is not None:
+        # The configured path is inside a checkout: no component below the checkout root may be a symlink, so a link
+        # retargeted to another tracked file cannot be accepted under that other file's name.
+        current = root
+        for part in lexical.relative_to(root).parts:
+            current = current / part
+            if stat.S_ISLNK(os.lstat(current).st_mode):
+                raise SourceAuthenticationError(f"manifest path {current} is a symlink inside the checkout")
+        rel = lexical.relative_to(root).as_posix()
+        real = lexical
+        root = find_git_root(root)
+    else:
+        # Reached through a link outside any checkout: resolve once. The digest binding is the real pin in that layout.
+        real = Path(os.path.realpath(path))
+        root = find_git_root(real)
+        rel = real.relative_to(root).as_posix()
     _mode, blob_id, raw = read_blob_at(root, revision, rel)
     if expected_sha256 is not None and expected_sha256 != "sha256:" + hashlib.sha256(raw).hexdigest():
         raise SourceAuthenticationError("authenticated manifest bytes do not match the expected digest")

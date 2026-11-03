@@ -57,6 +57,8 @@ after verification are not consulted: the cache key is the raw configured string
 - Downstream git subprocesses (run by ODES, Evidence Pack, qualification) execute in the synthesized repository, not
   the live one.
 - The `pinned_module()` fast path does not re-read the checkouts after the first successful strict load in a process.
+- A symlink inside the manifest checkout is refused; a link reached from OUTSIDE any checkout is resolved once at verification, so in that layout `GAX_AUTHENTICATED_MANIFEST_SHA256` is the real pin.
+- A forked child never removes the parent's authenticated copy (cleanup runs only in the owning process).
 - Mixed line endings: the live-checkout policy comparison tolerates CRLF vs LF for source trees (never for the
   manifest); the imported bytes are still the authenticated ones.
 
@@ -64,7 +66,7 @@ after verification are not consulted: the cache key is the raw configured string
 
 - Checkouts using a gitfile (`.git` file), linked worktrees, alternates or submodule layouts are refused rather than
   interpreted.
-- Bounds: object 16 MiB, total 256 MiB, 10,000 files per tree, delta base cache 48 MiB; the manifest is limited to 1 MiB.
+- Bounds: object 8 MiB, total authenticated bytes 192 MiB, decompression work 256 MiB, at most 10,000 files in total (each directory visit counts, so shared identical subtrees cannot multiply past it), 4,096 entries per tree and 20,000 tree entries in total, delta base cache 48 MiB; the manifest is limited to 1 MiB. The largest blob in the r2 tuple is about 150 KB; a typed-refusal-tuple runtime blob exceeded the former 1 MiB bound (its exact size could not be measured: that repository is not readable from here).
 - The first strict load costs several seconds (ODES alone about 6 s on a loaded machine); later loads reuse the copy.
 - Module `__file__` for pinned components is now under a `gax-authenticated-*` temporary directory, not the live
   checkout. Tests that pinned the old location now assert the detached copy.

@@ -217,8 +217,9 @@ _READY: dict[str, Any] = {}
 _TOP_LEVEL = ("agent_control_plane", "engine", "agent_replay_bundle", "odes", "agent_governance_evidence_pack")
 
 
-def _mismatch(name: str) -> RuntimeError:
-    return RuntimeError(f"candidate source identity mismatch: {name}")
+def _mismatch(name: str, cause: BaseException | None = None) -> RuntimeError:
+    detail = f" ({type(cause).__name__}: {cause})" if cause is not None else ""
+    return RuntimeError(f"candidate source identity mismatch: {name}{detail}")
 
 
 def _loaded_names(top: str) -> list[str]:
@@ -253,7 +254,7 @@ def _locate(top: str, entry: str, hinted: Path | None) -> tuple[Path, str]:
         repo = _auth.find_git_root(package_dir)
         rel = package_dir.relative_to(repo).as_posix()
     except (_auth.SourceAuthenticationError, ValueError) as exc:
-        raise _mismatch(entry) from exc
+        raise _mismatch(entry, exc) from exc
     return repo, rel
 
 
@@ -321,7 +322,7 @@ def _verify_refusal_profile_sources(cp_root: Path | None = None, molt_root: Path
         try:
             materialized = _auth.materialize(repo, revision, label=top)
         except (_auth.SourceAuthenticationError, ValueError, OSError) as exc:
-            raise _mismatch(entry) from exc
+            raise _mismatch(entry, exc) from exc
         plan.append((top, entry, repo, rel, materialized))
     for top, entry, repo, rel, materialized in plan:
         try:
@@ -329,7 +330,7 @@ def _verify_refusal_profile_sources(cp_root: Path | None = None, molt_root: Path
             tracked = {path for _mode, path, _blob in materialized.entries}
             stray = _auth.untracked_problems(repo, tracked) if not problems else []
         except OSError as exc:
-            raise _mismatch(entry) from exc
+            raise _mismatch(entry, exc) from exc
         if problems:
             raise _mismatch(entry)
         if stray:

@@ -322,3 +322,43 @@ def test_synthesized_index_is_read_by_git_as_clean(tmp_path):
     assert git(copy, "status", "--porcelain") == ""
     assert git(copy, "ls-files", "-s").count("\n") == 3 and (copy / "link.py").is_symlink()
     assert (copy / "run.sh").stat().st_mode & 0o111 and not (copy / "a.py").stat().st_mode & 0o111
+
+
+def test_identical_directories_share_one_tree_object_and_still_authenticate(tmp_path):
+    """B1: two directories with identical content are ONE git tree object; that is a legitimate pinned commit."""
+    rev = make_repo(tmp_path / "r", {"a/__init__.py": "", "b/__init__.py": "", "c/x/__init__.py": "", "c/y/__init__.py": ""})
+    commit = auth.authenticate_commit(tmp_path / "r", rev)
+    assert [e[1] for e in commit.entries] == ["a/__init__.py", "b/__init__.py", "c/x/__init__.py", "c/y/__init__.py"]
+    assert (auth.materialize(tmp_path / "r", rev).path / "b/__init__.py").is_file()
+
+
+def test_shared_subtree_bomb_is_still_bounded(tmp_path, monkeypatch):
+    rev = make_repo(tmp_path / "r", {f"d{i}/f.py": "" for i in range(12)})
+    monkeypatch.setattr(auth, "MAX_FILES", 5)
+    with pytest.raises(ValueError, match="too many files"):
+        auth.authenticate_commit(tmp_path / "r", rev)
+    monkeypatch.setattr(auth, "MAX_FILES", 10_000)
+    monkeypatch.setattr(auth, "MAX_TOTAL_TREE_ENTRIES", 8)
+    with pytest.raises(ValueError, match="too many entries"):
+        auth.authenticate_commit(tmp_path / "r", rev)
+
+
+def test_refusal_message_carries_the_cause(world2, monkeypatch):
+    def boom(*a, **k):
+        raise ValueError("object missing or not authentic as a blob: deadbeef")
+    monkeypatch.setattr(auth, "materialize", boom)
+    with pytest.raises(RuntimeError, match=r"candidate source identity mismatch: .*\(ValueError: object missing"):
+        runtime.load_executor_runtime()
+
+
+def test_forked_child_exit_does_not_delete_the_parents_authenticated_copy(tmp_path):
+    rev = make_repo(tmp_path / "r", {"a.py": "1\n"})
+    copy = auth.materialize(tmp_path / "r", rev).path
+    pid = os.fork()
+    if pid == 0:
+        try:
+            auth._cleanup()
+        finally:
+            os._exit(0)
+    os.waitpid(pid, 0)
+    assert (copy / "a.py").is_file()

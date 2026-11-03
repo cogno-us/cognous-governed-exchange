@@ -156,7 +156,7 @@ def test_module_loaded_from_outside_the_authenticated_copy_is_refused(world2):
 @pytest.mark.parametrize("entry", ["make_message", "assess_message", "runtime_proposal_model", "build_resolver",
                                    "run_exchange", "run_exchange_legacy", "resume_original_exchange", "run_actual_outcome",
                                    "run_demo", "synthetic_policy", "synthetic_observation_policy"])
-def test_import_marker_never_executes_before_verification_at_any_entry_point(world, entry):
+def test_import_marker_never_executes_before_verification_at_any_entry_point(world, entry, monkeypatch):
     """Every entry point goes through the authenticated loader first: a dirty Control Plane on the ambient path never runs."""
     msg = base.make_message(BUNDLE)                                  # built from the clean authenticated stub
     sys.modules.pop("agent_control_plane", None)
@@ -167,7 +167,7 @@ def test_import_marker_never_executes_before_verification_at_any_entry_point(wor
     dirty_cp(world)
     bundle_file = world["tmp"] / "bundle.json"
     bundle_file.write_text(json.dumps(BUNDLE))
-    os.environ["UPSTREAM_REPLAY_SUCCESS_EXAMPLE"] = str(bundle_file)
+    monkeypatch.setenv("UPSTREAM_REPLAY_SUCCESS_EXAMPLE", str(bundle_file))      # restored at teardown
     calls = {
         "make_message": lambda: base.make_message(BUNDLE),
         "assess_message": lambda: base.assess_message(msg, BUNDLE, registry(), evaluation_time=base.EVAL),
@@ -185,11 +185,8 @@ def test_import_marker_never_executes_before_verification_at_any_entry_point(wor
         "synthetic_policy": lambda: __import__("experiments.odex_gax_imx_reference.synthetic_fixture", fromlist=["x"]).synthetic_refund_policy(None),
         "synthetic_observation_policy": lambda: __import__("experiments.odex_gax_imx_reference.synthetic_fixture", fromlist=["x"]).synthetic_observation_policy(),
     }
-    try:
-        with pytest.raises(Exception) as caught:
-            calls[entry]()
-    finally:
-        os.environ.pop("UPSTREAM_REPLAY_SUCCESS_EXAMPLE", None)
+    with pytest.raises(Exception) as caught:
+        calls[entry]()
     assert not world["marker"].exists(), f"{entry}: dirty Control Plane executed before verification"
     assert isinstance(caught.value, (RuntimeError, ValueError)), repr(caught.value)
 

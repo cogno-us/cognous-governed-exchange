@@ -64,7 +64,7 @@ after verification are not consulted: the cache key is the raw configured string
 
 - Checkouts using a gitfile (`.git` file), linked worktrees, alternates or submodule layouts are refused rather than
   interpreted.
-- Bounds: object 1 MiB, total 128 MiB, 10,000 files per tree, delta base cache 48 MiB.
+- Bounds: object 16 MiB, total 256 MiB, 10,000 files per tree, delta base cache 48 MiB; the manifest is limited to 1 MiB.
 - The first strict load costs several seconds (ODES alone about 6 s on a loaded machine); later loads reuse the copy.
 - Module `__file__` for pinned components is now under a `gax-authenticated-*` temporary directory, not the live
   checkout. Tests that pinned the old location now assert the detached copy.

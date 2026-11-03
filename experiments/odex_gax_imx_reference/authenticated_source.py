@@ -58,10 +58,10 @@ class SourceAuthenticationError(ValueError):
 # Bounds. Sized from the real pinned components (largest: ODES, ~1.5k files / ~20 MiB / largest blob ~150 KiB) with
 # headroom; they are limits on hostile object databases, not Git's own limits.
 # ---------------------------------------------------------------------------------------------------------------------
-MAX_OBJECT_SIZE = 1024 * 1024
+MAX_OBJECT_SIZE = 16 * 1024 * 1024   # a pinned component may carry large fixtures; per-object, still bounded
 MAX_COMPRESSED = MAX_OBJECT_SIZE + 256 * 1024
-MAX_TOTAL_BYTES = 128 * 1024 * 1024
-MAX_WORK_BYTES = 512 * 1024 * 1024
+MAX_TOTAL_BYTES = 256 * 1024 * 1024
+MAX_WORK_BYTES = 1024 * 1024 * 1024
 MAX_OBJECTS = 20_000
 MAX_TREE_ENTRIES = 4096
 MAX_TOTAL_TREE_ENTRIES = 20_000
@@ -270,7 +270,7 @@ class _Pack:
 
     def _stream(self, pos: int, expected: int) -> bytes:
         if expected > MAX_OBJECT_SIZE:
-            raise ValueError("object exceeds the size bound")
+            raise ValueError(f"object exceeds the size bound ({expected} > {MAX_OBJECT_SIZE})")
         self.store.charge_work(expected)
         cursor = [pos]
 
@@ -310,7 +310,7 @@ class _Pack:
                 size |= (byte & 0x7F) << shift
                 shift += 7
             if size > MAX_OBJECT_SIZE:
-                raise ValueError("pack object declares a size above the bound")
+                raise ValueError(f"pack object declares a size above the bound ({size} > {MAX_OBJECT_SIZE})")
             if kind in _TYPES:
                 data = self._stream(offset + used, size)
                 kind_name = _TYPES[kind]

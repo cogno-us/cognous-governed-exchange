@@ -126,12 +126,12 @@ def test_equivalent_looking_but_byte_different_manifest_is_refused(world2):
         runtime.load_executor_runtime()                              # no line-ending leniency for the manifest
 
 
-def test_manifest_with_duplicate_keys_or_nonfinite_numbers_is_refused(world2):
+def test_manifest_with_duplicate_keys_or_nonfinite_numbers_is_refused(world2, monkeypatch):
     for text in ('{"a": 1, "a": 2}\n', '{"a": NaN}\n', '{"a": 1e999}\n', '[1]\n'):
         sub = world2["tmp"] / ("m-" + str(abs(hash(text))))
         rev = make_repo(sub, {"examples/m.json": text})
-        os.environ["UPSTREAM_MANIFEST_EXAMPLE"] = str(sub / "examples/m.json")
-        runtime.MANIFEST_REVISION = rev
+        monkeypatch.setenv("UPSTREAM_MANIFEST_EXAMPLE", str(sub / "examples/m.json"))
+        monkeypatch.setattr(runtime, "MANIFEST_REVISION", rev)
         with pytest.raises(RuntimeError, match="candidate source identity mismatch: manifest"):
             runtime.load_executor_runtime()
 

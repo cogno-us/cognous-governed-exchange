@@ -1,4 +1,4 @@
-# Authenticated source (strict profiles)
+# Authenticated source and authoritative manifest (strict profiles)
 
 Applies to every strict-source profile: `typed-refusal-candidate-20261015` and the seven security runtime profiles.
 Non-strict profiles keep the ambient import and the caller manifest unchanged.
@@ -29,6 +29,23 @@ That comparison explains refusals; it is not the security boundary. The imported
 Entry points: `gax_ref._cp()` (ambient import), `run_exchange`, `resume_original_exchange`, `run_actual_outcome`,
 `run_demo`, the legacy `gax_ref.run_exchange` / `run_demo`, and `export_odes_reference`. Each authenticates before
 anything pinned is imported or executed.
+
+## Authoritative manifest
+
+In strict profiles the manifest is read as exact bounded bytes, authenticated against the blob at the intended source
+revision (the manifest component pin), and parsed once into an immutable `AuthenticatedManifest` (frozen value, raw
+SHA-256, canonical digest equal to `gax_ref.digest`). Duplicate keys and NaN/Infinity are rejected. That object and its
+digest are carried into authorization and execution; the mutable path is never reopened for security-critical use.
+
+The `manifest=` argument is kept for compatibility only. A caller manifest must equal the authenticated manifest by BOTH
+typed canonical semantic equality AND digest equality; otherwise `ManifestMismatchError` is raised. The caller manifest
+is never preferred. Qualification-style `run_exchange(manifest=json.loads(upstream example))` therefore stays valid
+when the example is the authenticated manifest.
+
+Deployment model: digest-bound authenticated bytes. Set `GAX_AUTHENTICATED_MANIFEST_SHA256` to bind the expected raw
+SHA-256; the file path (`UPSTREAM_MANIFEST_EXAMPLE` or the default `upstream/manifest/examples/refund_integration_v1_1.manifest.json`)
+is only a location and no particular filename is privileged. Symlink retargeting, rename swaps and in-place mutation
+after verification are not consulted: the cache key is the raw configured string and the bytes are held in memory.
 
 ## Residual trust (out of scope, not removed)
 

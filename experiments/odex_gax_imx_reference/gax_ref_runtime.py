@@ -404,13 +404,19 @@ def authenticated_manifest() -> Any:
 
 
 def bind_manifest(manifest: dict[str, Any] | None) -> dict[str, Any] | None:
-    """Loader ordering for public entry points: strict profiles authenticate every pinned source before anything else runs.
+    """Strict profiles: the authenticated manifest is authoritative; a caller manifest must equal it (semantics AND digest).
 
-    The manifest is returned unchanged here (its consumption is not yet bound to the authenticated bytes).
+    Authenticates the sources first (the loader runs before anything else), refuses a differing caller manifest, and returns
+    a fresh copy parsed from the authenticated bytes, which is what authorization and execution use. ``None`` means "use the
+    authenticated manifest". Other profiles return the caller's manifest unchanged (compatibility behaviour).
     """
-    if _is_strict():
-        load_executor_runtime()
-    return manifest
+    if not _is_strict():
+        return manifest
+    load_executor_runtime()
+    authenticated = _strict_manifest()
+    if manifest is not None:
+        authenticated.require_caller_manifest(manifest)
+    return authenticated.to_dict()
 
 
 _bind_manifest = bind_manifest
@@ -492,6 +498,9 @@ def _json_loads(value: str | None) -> Any:
 
 
 def _manifest() -> dict[str, Any]:
+    if _is_strict():
+        # The authenticated manifest (exact bytes of the pinned revision's blob), never a reopen of the mutable path.
+        return _strict_manifest().to_dict()
     path = _manifest_path()
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -534,6 +543,11 @@ def reconstruction_dict(reconstructed: Any) -> dict[str, Any]:
 def export_odes_reference(manifest: dict[str, Any], reconstruction_bundle: dict[str, Any]) -> dict[str, Any]:
     odes = pinned_module("odes")
     evaluate_recipient_package, export_cognous_stack_package = odes.evaluate_recipient_package, odes.export_cognous_stack_package
+    if _is_strict():
+        authenticated = _strict_manifest()
+        authenticated.require_caller_manifest(manifest)
+        manifest = authenticated.to_dict()
+
     package = export_cognous_stack_package(
         manifest,
         reconstruction_bundle,

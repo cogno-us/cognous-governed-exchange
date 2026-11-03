@@ -73,13 +73,27 @@ def proposal_from_bundle(bundle: dict[str, Any]) -> dict[str, Any]:
     return proposal
 
 
+def _runtime():
+    from . import gax_ref_runtime
+    return gax_ref_runtime
+
+
+def _pinned(name: str):
+    """A pinned package module. Under a strict source profile this is reachable only through the authenticated loader
+    (sources authenticated in-process, module imported from the detached copy); never through the ambient sys.path."""
+    return _runtime().pinned_module(name)
+
+
+_CP_NAMES = (
+    "ApprovalStatus", "BoundedAuthorizationWorkflow", "BoundedRecordStore", "ConflictStatus",
+    "EffectObservation", "EvidenceStatus", "GrantStatus", "IdentityStatus", "MandateStatus",
+    "PolicyStatus", "RoleMappingStatus", "RuntimeProposal", "SyntheticResolver", "commitment",
+)
+
+
 def _cp():
-    from agent_control_plane.bounded import (
-        ApprovalStatus, BoundedAuthorizationWorkflow, BoundedRecordStore, ConflictStatus,
-        EffectObservation, EvidenceStatus, GrantStatus, IdentityStatus, MandateStatus,
-        PolicyStatus, RoleMappingStatus, RuntimeProposal, SyntheticResolver, commitment,
-    )
-    return locals()
+    bounded = _pinned("agent_control_plane.bounded")
+    return {name: getattr(bounded, name) for name in _CP_NAMES}
 
 
 def cp_commitment(value: Any) -> str:
@@ -300,18 +314,20 @@ def execution_facts(bundle: dict[str, Any]) -> dict[str, Any]:
 def _run_replay(bundle: dict[str, Any]) -> dict[str, Any]:
     grouped: dict[str, list[dict[str, Any]]] = {}
     for r in bundle.get("records", []): grouped.setdefault(r["record_type"], []).append(data(r))
-    from agent_replay_bundle.importers import import_bounded_workflow
+    import_bounded_workflow = _pinned("agent_replay_bundle.importers").import_bounded_workflow
     cp = {"run_id": bundle.get("run_id"), "decisions": grouped.get("runtime_decision", []), "attempts": grouped.get("control_plane_attempt_transition", []), "observations": grouped.get("effect_observation", []), "reconciliations": grouped.get("reconciliation", [])}; proposal = grouped.get("runtime_proposal", [None])[0]; moltbot = None
     if grouped.get("execution_envelope"): moltbot = {"execution_envelope": grouped["execution_envelope"][0], "execution_result": grouped.get("execution_result", [{}])[0], "attempts": grouped.get("destination_attempt", []), "attempt_events": grouped.get("destination_attempt_event", []), "effects": grouped.get("destination_effect", [])}
     rec = import_bounded_workflow(cp, proposal=proposal, moltbot_export=moltbot); return {"status": getattr(rec, "status", "unknown")}
 
 
 def export_odes_reference(manifest: dict[str, Any], bundle: dict[str, Any]) -> dict[str, Any]:
-    from odes import evaluate_recipient_package, export_cognous_stack_package
+    _odes = _pinned("odes"); evaluate_recipient_package, export_cognous_stack_package = _odes.evaluate_recipient_package, _odes.export_cognous_stack_package
+    manifest = _runtime().bind_manifest(manifest)
     package = export_cognous_stack_package(manifest, bundle, relying_party="recipient.example.org", purpose="audit", expires_at="2027-01-01T00:00:00Z"); package.setdefault("provenance", {})["execution_facts"] = execution_facts(bundle); policy = {"now": "2026-10-06T00:00:00Z", "purpose": "audit", "relying_party": "recipient.example.org", "status_inputs": {}, "supported_profiles": ["odes_cognous_stack_export_0_1"], "trusted_digests": [], "trusted_key_refs": [], "evaluation_scope": "audit", "status_max_age_seconds": 300}; return {"odes_package": package, "recipient_validation": evaluate_recipient_package(package, policy)}
 
 
 def run_exchange(message: dict[str, Any], bundle: dict[str, Any], registry: LocalRegistry, destination: DestinationState, *, evaluation_time: str, manifest: dict[str, Any], store_path: str | Path, resolver: Any | None = None, mutate_resolver_after_decision=None, lose_ack: bool = False, partial_delivery: bool = False) -> dict[str, Any]:
+    manifest = _runtime().bind_manifest(manifest)  # strict source profiles: the authenticated manifest is authoritative
     if resolver is None: raise ValueError("trusted resolver is required; incoming proposals never construct authority")
     store = TransactionalExchangeStore(store_path); duplicate, err = store.record_message(message)
     if err: return {"assessment": {"permitted_handling": "REFUSE", "errors": [err], "stages": {"identity_binding": "failed"}}, "execution": {"attempted": False, "reason": err}}
@@ -337,7 +353,7 @@ def load_successor_packet(packet: dict[str, Any], destination: DestinationState,
     return TransactionalExchangeStore(store_path).accept_successor(packet, predecessor)
 
 def run_demo(manifest_path: str, replay_path: str, out_path: str) -> dict[str, Any]:
-    manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8")); bundle = json.loads(Path(replay_path).read_text(encoding="utf-8")); tmp = Path(out_path).parent; dest = DestinationState(tmp / "demo_destination.sqlite"); proposal = runtime_proposal_model(bundle); resolver = _build_resolver(proposal, now=parse_time(EVAL)); result = run_exchange(make_message(bundle), bundle, LocalRegistry({"refund-sender"}, {"refund-recipient"}, "refund-recipient"), dest, evaluation_time=EVAL, manifest=manifest, store_path=tmp / "demo_exchange.sqlite", resolver=resolver); Path(out_path).write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8"); return result
+    manifest = _runtime().bind_manifest(json.loads(Path(manifest_path).read_text(encoding="utf-8"))); bundle = json.loads(Path(replay_path).read_text(encoding="utf-8")); tmp = Path(out_path).parent; dest = DestinationState(tmp / "demo_destination.sqlite"); proposal = runtime_proposal_model(bundle); resolver = _build_resolver(proposal, now=parse_time(EVAL)); result = run_exchange(make_message(bundle), bundle, LocalRegistry({"refund-sender"}, {"refund-recipient"}, "refund-recipient"), dest, evaluation_time=EVAL, manifest=manifest, store_path=tmp / "demo_exchange.sqlite", resolver=resolver); Path(out_path).write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8"); return result
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(); parser.add_argument("--manifest", required=True); parser.add_argument("--replay", required=True); parser.add_argument("--out", required=True); args = parser.parse_args(argv); run_demo(args.manifest, args.replay, args.out); return 0

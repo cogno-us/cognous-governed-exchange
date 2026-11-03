@@ -7,3 +7,5 @@ The trusted Python caller must supply `runtime_authority_profile` to `run_exchan
 The reference retains actual runtime-authority journals, typed refusals, original effect ownership, acknowledgements, unknown outcomes and derivative recovery evidence through the strict migrated consumers. A retained failure-record identifier is not proof of its row's independent durability. Historical records require their original revision-pinned recovery path; the new profile does not relabel old evidence.
 
 Scenario tests and results are maintained in the central qualification repository, `suites/security-runtime`. No selected lock/profile, production action or publication acceptance changes.
+
+Note (3 November 2026): the source verification described above is superseded in mechanism by in-process authenticated-source loading; see `docs/authenticated-source.md`. Pins and profile semantics are unchanged.

@@ -11,6 +11,7 @@ import sqlite3
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 import pytest
 
@@ -221,31 +222,36 @@ def test_assume_unchanged_flag_alone_is_refused_even_without_a_modification(fake
 
 
 def test_content_differing_from_the_head_blob_is_reported_by_the_hash_comparison(fake_checkouts):  # noqa: F811
+    from experiments.odex_gax_imx_reference import authenticated_source as auth
     roots, marker = fake_checkouts
     path = roots["replay"] / "src/agent_replay_bundle/importers.py"
-    assert runtime._executed_file_problems([path]) == []
+    entries = auth.authenticate_commit(roots["replay"], runtime.REPLAY_REVISION).entries
+    assert auth.worktree_problems(roots["replay"], entries) == []
     path.write_text(_planted(marker))
-    assert runtime._executed_file_problems([path]) == ["content differs from the revision: src/agent_replay_bundle/importers.py"]
+    assert auth.worktree_problems(roots["replay"], entries) == ["content differs from the revision: src/agent_replay_bundle/importers.py"]
 
 
 def test_change_between_verification_and_import_is_refused(fake_checkouts, monkeypatch):  # noqa: F811
+    """A live-checkout change after authentication and before the import can no longer reach execution: the import reads
+    the private authenticated copy. (The pre-P1 test pinned a refusal because the import read the live checkout.)"""
     roots, marker = fake_checkouts
     path = roots["replay"] / "src/agent_replay_bundle/importers.py"
-    original = runtime._locate_without_import
-    state = {"calls": 0}
+    original = runtime._import_pinned
 
-    def locate(name, expected):
-        out = original(name, expected)
+    def import_after_swap(name):
         if name == "agent_replay_bundle.importers":
-            state["calls"] += 1
-            if state["calls"] == 2:  # after the first verification pass, before the import
-                path.write_text(_planted(marker))
-        return out
+            path.write_text(_planted(marker))  # after verification, immediately before the import
+        return original(name)
 
-    monkeypatch.setattr(runtime, "_locate_without_import", locate)
-    with pytest.raises(RuntimeError, match="candidate source identity mismatch: agent_replay_bundle.importers"):
-        runtime.load_executor_runtime()
+    monkeypatch.setattr(runtime, "_import_pinned", import_after_swap)
+    loaded = runtime.load_executor_runtime()
     assert not marker.exists()
+    assert path.read_text() == _planted(marker)  # the live file was changed...
+    module = sys.modules["agent_replay_bundle.importers"]
+    assert module.PLANTED is False and Path(module.__file__).resolve() != path.resolve()  # ...but never executed
+    monkeypatch.setattr(runtime, "_import_pinned", original)
+    with pytest.raises(RuntimeError, match="candidate source identity mismatch: agent_replay_bundle.importers"):
+        runtime.load_executor_runtime()  # and the dirty checkout is refused on the next authentication
 
 
 # ---------------------------------------------------------------- bounded rejection acknowledgements

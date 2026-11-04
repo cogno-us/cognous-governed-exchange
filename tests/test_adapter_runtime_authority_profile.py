@@ -49,6 +49,10 @@ class FakeProfile:
 
     __hash__ = None
 
+    @property
+    def allow_synthetic_resolver(self):
+        return bool(self.data.get("allow_synthetic_resolver", False))
+
 
 @pytest.fixture
 def set_profile(monkeypatch):
@@ -310,3 +314,42 @@ def test_p2_profile_does_not_alter_p2_refusal_of_the_real_runtime_without_it(set
     with pytest.raises(ValueError, match="requires trusted runtime_authority_profile"):
         rt.run_exchange(msg(), {}, None, None, evaluation_time=NOW, manifest={}, store_path=tmp_path / "s.sqlite")
     assert not (tmp_path / "s.sqlite").exists()
+
+
+def test_authenticated_loader_runs_before_the_model_is_imported_and_its_failure_propagates(set_profile, tmp_path, monkeypatch):
+    order = []
+    mod = sys.modules["agent_control_plane.runtime_authority"]
+    parent = sys.modules["agent_control_plane"]
+    monkeypatch.delitem(sys.modules, "agent_control_plane.runtime_authority")
+    monkeypatch.delitem(sys.modules, "agent_control_plane")
+
+    def loader():
+        order.append("load")                       # the real loader is what makes the authenticated package importable
+        sys.modules["agent_control_plane"] = parent
+        sys.modules["agent_control_plane.runtime_authority"] = mod
+        return {}
+    monkeypatch.setattr(rt, "load_executor_runtime", loader)
+    try:
+        build(tmp_path, runtime_authority_profile=GOOD)
+        assert order == ["load"]
+    finally:
+        sys.modules.pop("agent_control_plane.runtime_authority", None)
+        sys.modules.pop("agent_control_plane", None)
+
+    def failing():
+        raise RuntimeError("candidate source identity mismatch")
+    monkeypatch.setattr(rt, "load_executor_runtime", failing)
+    with pytest.raises(RuntimeError, match="identity mismatch"):
+        build(tmp_path, runtime_authority_profile=GOOD)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_synthetic_resolver_profile_without_test_clock_is_refused_at_construction(set_profile, tmp_path):
+    synthetic = {**GOOD, "allow_synthetic_resolver": True}
+    with pytest.raises(ValueError, match="synthetic authority profile requires explicit test clock"):
+        build(tmp_path, runtime_authority_profile=synthetic)
+    assert list(tmp_path.iterdir()) == []
+    spy = Spy()
+    build(tmp_path, spy, runtime_authority_profile=synthetic, allow_test_time=True).handle(msg(), delivery_time=NOW)
+    assert spy.calls[0]["allow_test_time"] is True
+    build(tmp_path, runtime_authority_profile={**GOOD, "allow_synthetic_resolver": False})

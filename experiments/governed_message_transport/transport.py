@@ -280,6 +280,9 @@ class AcceptedGaxRecipientAdapter:
             # Validated and detached now by the Control Plane's own RuntimeAuthorityProfile model (the validation the
             # workflow applies later), so a malformed profile fails before any message id is reserved.
             self._authority_profile = _validated_authority_profile(runtime_authority_profile)
+            if getattr(self._authority_profile, "allow_synthetic_resolver", False) and not allow_test_time:
+                # The Control Plane's own composition rule and message, applied before any state exists.
+                raise ValueError("synthetic authority profile requires explicit test clock")
             self._allow_test_time = allow_test_time
 
         self._assess_message = assess_message

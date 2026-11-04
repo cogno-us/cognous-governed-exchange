@@ -13,7 +13,7 @@ def build_synthetic_resolver(proposal: Any, *, now: datetime | None = None, acti
 
 def synthetic_refund_policy(operation: Any):
     """Explicit synthetic execution policy for the bounded refund fixture."""
-    from engine.producer_contract import LocalExecutionPolicy
+    LocalExecutionPolicy = gax_ref._pinned("engine.producer_contract").LocalExecutionPolicy
 
     return LocalExecutionPolicy(
         allowed_institutions=frozenset({operation.institution_id}),
@@ -29,7 +29,7 @@ def synthetic_refund_policy(operation: Any):
 
 def synthetic_observation_policy():
     """Explicit local observation policy for bounded demos/tests only."""
-    from agent_control_plane.bounded import ObservationPolicy
+    ObservationPolicy = gax_ref._pinned("agent_control_plane.bounded").ObservationPolicy
     return ObservationPolicy(max_age_seconds=60)
 
 

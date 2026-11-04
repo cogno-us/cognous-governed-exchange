@@ -44,3 +44,5 @@ Historical unresolved work requires its original revision-pinned recovery path;
 no cross-generation recovery or in-place production-store migration is qualified
 by these tests. Synthetic S1 stores are isolated test fixtures. Do not reset an
 ownership store to make a new profile accept historical work.
+
+Note (3 November 2026): the source verification described above is superseded in mechanism by in-process authenticated-source loading; see `docs/authenticated-source.md`. Pins and profile semantics are unchanged.

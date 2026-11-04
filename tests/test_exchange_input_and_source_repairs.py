@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.machinery
 import importlib.util
+import os
 import py_compile
 import subprocess
 import sys
@@ -15,6 +16,7 @@ from pathlib import Path
 
 import pytest
 
+from experiments.odex_gax_imx_reference import authenticated_source as auth
 from experiments.odex_gax_imx_reference import gax_ref as base
 from experiments.odex_gax_imx_reference import gax_ref_runtime as runtime
 
@@ -205,11 +207,22 @@ def _planted(marker: Path) -> str:
     return f"from pathlib import Path\nPath({str(marker)!r}).write_text('ran')\nPLANTED = True\n"
 
 
+def assert_runs_authenticated_copy(module, live: Path) -> None:
+    """P1 Exchange-1: a strict profile executes a private read-only copy of the authenticated bytes, never the live checkout
+    file. (Before, these tests asserted ``module.__file__`` was the live checkout path, which is exactly the mutable-source
+    execution the finding is about.)"""
+    actual = Path(module.__file__).resolve()
+    assert actual != Path(live).resolve()
+    assert actual.read_bytes() == Path(live).read_bytes()
+    assert actual.stat().st_mode & 0o222 == 0  # read-only
+    assert Path(live).resolve().parent not in actual.parents
+
+
 def test_clean_candidate_sources_verify_then_import_from_verified_paths(fake_checkouts):
     roots, marker = fake_checkouts
     loaded = runtime.load_executor_runtime()
-    assert Path(loaded["cp"].__file__).resolve() == (roots["control_plane"] / "src/agent_control_plane/bounded.py").resolve()
-    assert Path(loaded["producer"].__file__).resolve() == (roots["runtime"] / "engine/producer_contract.py").resolve()
+    assert_runs_authenticated_copy(loaded["cp"], roots["control_plane"] / "src/agent_control_plane/bounded.py")
+    assert_runs_authenticated_copy(loaded["producer"], roots["runtime"] / "engine/producer_contract.py")
     assert not marker.exists()
 
 
@@ -543,7 +556,7 @@ def current_checkouts(tmp_path, monkeypatch):
 def test_current_profile_accepts_the_correct_tuple(current_checkouts):
     roots, _, marker = current_checkouts
     loaded = runtime.load_executor_runtime()
-    assert Path(loaded["cp"].__file__).resolve() == (roots["control_plane"] / "src/agent_control_plane/bounded.py").resolve()
+    assert_runs_authenticated_copy(loaded["cp"], roots["control_plane"] / "src/agent_control_plane/bounded.py")
     assert not marker.exists()
 
 
@@ -637,7 +650,7 @@ def test_real_module_runs_the_strict_check_and_accepts_the_correct_tuple(current
     module, roots, _, marker, calls = current_module
     loaded = module.load_executor_runtime()
     assert len(calls) == 1  # the strict source-identity check actually ran (not silently skipped)
-    assert Path(loaded["cp"].__file__).resolve() == (roots["control_plane"] / "src/agent_control_plane/bounded.py").resolve()
+    assert_runs_authenticated_copy(loaded["cp"], roots["control_plane"] / "src/agent_control_plane/bounded.py")
     assert not marker.exists()
 
 
@@ -880,7 +893,7 @@ def test_r2_positive_control_the_correct_tuple_is_accepted_once_every_pin_matche
     align_all()  # stands in for the final resolved pins: same machinery, fixture commits
     loaded = module.load_executor_runtime()
     assert len(calls) == 1 and not marker.exists()
-    assert Path(loaded["cp"].__file__).resolve() == (roots["control_plane"] / "src/agent_control_plane/bounded.py").resolve()
+    assert_runs_authenticated_copy(loaded["cp"], roots["control_plane"] / "src/agent_control_plane/bounded.py")
 
 
 # F-K: changed Replay / Control Plane / Runtime / ODES / Pack / Manifest SHA (one-hex-digit change of the otherwise-correct pin)
@@ -1092,27 +1105,31 @@ def test_replace_ref_substitution_is_refused_before_the_substituted_code_execute
 
 @pytest.mark.parametrize("mode", ["commit", "tree", "alt-base"])
 def test_replace_refs_are_not_interpreted_by_the_identity_and_blob_checks(current_checkouts, monkeypatch, mode):
-    # Independent of the refusal below: the checks that read objects must see the real commit, not the replacement.
+    # Independent of the refusal below: the in-process reader names objects by id, so a replace ref can neither redirect the
+    # commit/tree it authenticates nor make the substituted working tree look like the revision.
     roots, _, marker = current_checkouts
-    _substitute(roots["replay"], marker, mode, monkeypatch)
-    executed = [roots["replay"] / "src/agent_replay_bundle/__init__.py", roots["replay"] / _EVIL_REL]
-    _, changed = runtime._git_source_identity(roots["replay"] / "src/agent_replay_bundle", executed)
-    assert changed
-    assert runtime._executed_file_problems(executed)
+    pinned = _substitute(roots["replay"], marker, mode, monkeypatch)
+    authenticated = auth.authenticate_commit(roots["replay"], pinned)
+    blob = dict((rel, blob) for _mode, rel, blob in authenticated.entries)[_EVIL_REL]
+    assert blob == _git(roots["replay"], "--no-replace-objects", "rev-parse", f"{pinned}:{_EVIL_REL}")
+    assert blob != _git(roots["replay"], "hash-object", "--no-filters", _EVIL_REL)  # the planted file is not the pinned blob
+    assert any("content differs" in p for p in auth.worktree_problems(roots["replay"], authenticated.entries))
 
 
 def test_checkout_with_a_replace_ref_is_reported(current_checkouts, monkeypatch):
     roots, _, marker = current_checkouts
-    assert not [p for p in runtime._checkout_source_problems(roots["replay"]) if "replace" in p]
+    entries = auth.authenticate_commit(roots["replay"], runtime.REPLAY_REVISION).entries
+    assert not [p for p in auth.worktree_problems(roots["replay"], entries) if "replace" in p]
     _substitute(roots["replay"], marker, "commit", monkeypatch)
-    assert any("refs/replace" in p for p in runtime._checkout_source_problems(roots["replay"]))
+    assert any("refs/replace" in p for p in auth.worktree_problems(roots["replay"], entries))
 
 
 def test_unrelated_branches_and_tags_do_not_trip_the_replace_ref_refusal(fake_checkouts):
     roots, marker = fake_checkouts
     _git(roots["replay"], "tag", "release-1")
     _git(roots["replay"], "branch", "side")
-    assert not runtime._checkout_source_problems(roots["replay"])
+    entries = auth.authenticate_commit(roots["replay"], runtime.REPLAY_REVISION).entries
+    assert not auth.worktree_problems(roots["replay"], entries)
     runtime.load_executor_runtime()
     assert not marker.exists()
 
@@ -1246,7 +1263,7 @@ def test_r3_and_r2_positive_the_genuine_tuple_is_accepted(profile_module):
     align()
     loaded = module.load_executor_runtime()
     assert len(calls) == 1 and not marker.exists()
-    assert Path(loaded["cp"].__file__).resolve() == (roots["control_plane"] / "src/agent_control_plane/bounded.py").resolve()
+    assert_runs_authenticated_copy(loaded["cp"], roots["control_plane"] / "src/agent_control_plane/bounded.py")
 
 
 # Negative: one wrong component SHA, under each profile and for each of the six components
@@ -1336,4 +1353,4 @@ def test_r3_replace_ref_substitution_is_refused_before_the_substituted_code_exec
     with pytest.raises(RuntimeError, match="candidate source identity mismatch: agent_replay_bundle.importers"):
         module.load_executor_runtime()
     assert not marker.exists()
-    assert module._GIT == ("git", "--no-replace-objects")
+    assert not hasattr(module, "subprocess")  # no git process takes part in strict source authentication

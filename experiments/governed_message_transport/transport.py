@@ -226,6 +226,16 @@ class RecipientOutcome:
         }
 
 
+def _validated_authority_profile(profile: Any) -> Any:
+    import importlib
+
+    from experiments.odex_gax_imx_reference.gax_ref_runtime import load_executor_runtime
+
+    load_executor_runtime()  # authenticated pinned Control Plane; raises if unavailable (fail closed)
+    model = importlib.import_module("agent_control_plane.runtime_authority").RuntimeAuthorityProfile
+    return model.model_validate(profile).snapshot()
+
+
 class AcceptedGaxRecipientAdapter:
     """Adapter to the accepted GAX/IMX reference assessment/execution path.
 
@@ -249,11 +259,28 @@ class AcceptedGaxRecipientAdapter:
         observation_clock: Callable | None = None,
         clock_policy: DeliveryClockPolicy | None = None,
         evaluation_time: str | None = None,
+        runtime_authority_profile: Any = None,
+        allow_test_time: bool = False,
     ):
         from experiments.odex_gax_imx_reference.gax_ref_runtime import (
+            _workflow_options,
             assess_message,
             run_exchange,
         )
+
+        # Trusted host configuration, constructor-only: never read from a message or per call, and no default. Under a
+        # security-runtime profile it is required; under any other profile supplying it raises (it cannot elevate).
+        # Both rules are the existing run_exchange rules (_workflow_options), applied here before any store is touched.
+        if type(allow_test_time) is not bool:
+            raise TypeError("allow_test_time must be a bool")
+        authority = _workflow_options(runtime_authority_profile, allow_test_time)
+        self._authority_profile = None
+        self._allow_test_time = False
+        if authority:
+            # Validated and detached now by the Control Plane's own RuntimeAuthorityProfile model (the validation the
+            # workflow applies later), so a malformed profile fails before any message id is reserved.
+            self._authority_profile = _validated_authority_profile(runtime_authority_profile)
+            self._allow_test_time = allow_test_time
 
         self._assess_message = assess_message
         self._run_exchange = run_exchange
@@ -274,6 +301,18 @@ class AcceptedGaxRecipientAdapter:
         # Retained only for source compatibility with the initial transport
         # profile. It is intentionally not used for recipient evaluation.
         self.constructor_evaluation_time = evaluation_time
+
+    _authority_profile: Any = None
+    _allow_test_time = False
+
+    def _authority_kwargs(self) -> dict[str, Any]:
+        """Identical for handle, recover and resume_original. Empty (no new keyword) unless a profile was configured."""
+        if self._authority_profile is None:
+            return {}
+        return {
+            "runtime_authority_profile": self._authority_profile.snapshot(),
+            "allow_test_time": self._allow_test_time,
+        }
 
     def handle(self, message: dict[str, Any], *, delivery_time: str) -> RecipientOutcome:
         current_time = iso(self.clock_policy.validate_now(delivery_time))
@@ -334,6 +373,7 @@ class AcceptedGaxRecipientAdapter:
             execution_policy_factory=self.execution_policy_factory,
             observation_policy=self.observation_policy,
             observation_clock=self.observation_clock,
+            **self._authority_kwargs(),
         )
         execution = copy.deepcopy(result.get("execution") or {})
         artifact_export = copy.deepcopy(result.get("artifact_export"))
@@ -366,7 +406,7 @@ class AcceptedGaxRecipientAdapter:
             store_path=self.exchange_store_path, destination=self.destination,
             resolver=self.resolver, execution_policy_factory=self.execution_policy_factory,
             observation_policy=self.observation_policy, observation_clock=self.observation_clock,
-            evaluation_time=iso(self.clock_policy.validate_now(delivery_time)))
+            evaluation_time=iso(self.clock_policy.validate_now(delivery_time)), **self._authority_kwargs())
 
     def recover(self, message: dict[str, Any], *, delivery_time: str) -> RecipientOutcome:
         """Recover retained GAX artifacts without authorizing a replacement effect."""
@@ -383,6 +423,7 @@ class AcceptedGaxRecipientAdapter:
             execution_policy_factory=self.execution_policy_factory,
             observation_policy=self.observation_policy,
             observation_clock=self.observation_clock,
+            **self._authority_kwargs(),
         )
         execution = copy.deepcopy(result.get("execution") or {})
         artifact_export = copy.deepcopy(result.get("artifact_export"))

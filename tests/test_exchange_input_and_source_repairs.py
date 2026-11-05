@@ -1359,21 +1359,19 @@ def test_r3_replace_ref_substitution_is_refused_before_the_substituted_code_exec
 # P1: security-runtime-p1-20261105 ------------------------------------------------------------------------------------------------
 # A NEW profile registered BESIDE r3 (and p2, current, r2, which stay byte-unchanged). Data only. PROVISIONAL DEVELOPMENT PINS, NOT
 # ADOPTED; the tuple is UNQUALIFIED. The literals are typed independently here (not imported from the runtime).
-# DRAFT PLACEHOLDER LINES (replace both with the real 40-hex merge SHAs, here and in gax_ref_runtime.py, in ONE commit; then delete
-# the `test_p1_unresolved_*` tests): P1_ODES_PLACEHOLDER and P1_PACK_PLACEHOLDER below.
+# ODES 1e226128 is the merge of ODES #145 (parent 9d6f9edc) and Evidence Pack 06515085 the merge of Pack #67 (parent 39fecb00, which is the r3 Pack).
 
 P1_PROFILE = "security-runtime-p1-20261105"
-P1_ODES_PLACEHOLDER = "PENDING-ODES-O*-MERGE-SHA"  # PLACEHOLDER O*: replace with the ODES merge SHA (re-pin to Replay 93a76e28)
-P1_PACK_PLACEHOLDER = "PENDING-PACK-K*-MERGE-SHA"  # PLACEHOLDER K*: replace with the Evidence Pack merge SHA (re-pin to Replay 93a76e28)
+P1_ODES_PARENT = "9d6f9edcb9e1637bf8456b94bf15bf44e33cd75c"  # parent of the ODES #145 merge
+P1_PACK_PARENT = "39fecb004f3d4c4e87673d79d8d9399314f551e4"  # parent of the Pack #67 merge
 ARCHITECT_VERIFIED_P1_PINS = {
     "CP_REVISION": "484fdbd297235dd24148ddb0703f2055a31eabff",
     "MOLTBOT_REVISION": "f7a55e2a8494801e49193f9f46935f0a971c248d",
     "MANIFEST_REVISION": "fa170815ef96a54c233d0dd9da821b60debabf8b",
     "REPLAY_REVISION": "93a76e281fcae6a65d2cd1d35376f87442dafb95",
-    "ODES_REVISION": P1_ODES_PLACEHOLDER,
-    "EVIDENCE_PACK_REVISION": P1_PACK_PLACEHOLDER,
+    "ODES_REVISION": "1e2261289e8ff8e862b697f5c7afcf7007453787",
+    "EVIDENCE_PACK_REVISION": "065150852cc2a8abeb748777bb69d72ccd0e03d8",
 }
-P1_UNRESOLVED = sorted(k for k, v in ARCHITECT_VERIFIED_P1_PINS.items() if not _is_commit_id(v))
 P1_MODULES = {"CP_REVISION": "agent_control_plane.bounded", "REPLAY_REVISION": "agent_replay_bundle.importers",
               "ODES_REVISION": "odes.exporter", "EVIDENCE_PACK_REVISION": "agent_governance_evidence_pack.importer"}
 # Historical profile blocks as they were at GAX main e78a7be3 (before P1 was added); sha256 of each `elif` block (up to the next `elif`).
@@ -1404,8 +1402,9 @@ def test_p1_anchor_shipped_constants_equal_the_independently_typed_literals(monk
     module = _load_with_profile(monkeypatch, P1_PROFILE)
     assert module.RUNTIME_COMPATIBILITY_PROFILE == P1_PROFILE
     assert {name: getattr(module, name) for name in PINS} == ARCHITECT_VERIFIED_P1_PINS
-    assert set(P1_UNRESOLVED) <= {"ODES_REVISION", "EVIDENCE_PACK_REVISION"}  # only ODES and Pack may still be placeholders
-    assert all(_is_commit_id(v) for k, v in ARCHITECT_VERIFIED_P1_PINS.items() if k not in P1_UNRESOLVED)
+    assert all(_is_commit_id(v) for v in ARCHITECT_VERIFIED_P1_PINS.values())
+    assert ARCHITECT_VERIFIED_P1_PINS["ODES_REVISION"] == "1e2261289e8ff8e862b697f5c7afcf7007453787"
+    assert ARCHITECT_VERIFIED_P1_PINS["EVIDENCE_PACK_REVISION"] == "065150852cc2a8abeb748777bb69d72ccd0e03d8"
     assert len(set(ARCHITECT_VERIFIED_P1_PINS.values())) == len(PINS)
     assert ARCHITECT_VERIFIED_P1_PINS["CP_REVISION"] == "484fdbd297235dd24148ddb0703f2055a31eabff"
     assert ARCHITECT_VERIFIED_P1_PINS["MOLTBOT_REVISION"] == "f7a55e2a8494801e49193f9f46935f0a971c248d"
@@ -1593,7 +1592,7 @@ def test_p1_real_replay_accepts_the_p1_control_plane_label():
             "try:\n    import_bounded_workflow({}, proposal=None, moltbot_export=None, control_plane_revision=sys.argv[2])\n"
             "except Exception as e:\n    print(str(e))\n")
     def run(label):
-        return subprocess.run([sys.executable, "-I", "-c", code, os.environ["GAX_P1_REPLAY_SRC"], label], capture_output=True, text=True,
+        return subprocess.run([sys.executable, "-I", "-B", "-c", code, os.environ["GAX_P1_REPLAY_SRC"], label], capture_output=True, text=True,
                               env={"PYTHONDONTWRITEBYTECODE": "1"}, check=True).stdout
     assert "unsupported Control Plane revision" not in run(ARCHITECT_VERIFIED_P1_PINS["CP_REVISION"])  # label accepted (fails later on the empty record)
     assert "unsupported Control Plane revision" in run("0" * 40)  # control: the gate exists
@@ -1611,24 +1610,75 @@ def test_p1_gax_remains_tenantless_no_gax_side_effect_identity():
     assert not any(n in (root / "README.md").read_text() for n in needles)
 
 
-# Prep state: ODES and Evidence Pack are placeholders until their re-pins merge. REMOVE these tests (and the placeholders) with the final SHAs.
-@pytest.mark.skipif(not P1_UNRESOLVED, reason="all P1 pins are resolved")
-def test_p1_unresolved_placeholder_makes_the_profile_refuse_fail_closed(p1_module):
-    module, _, _, marker, calls, _ = p1_module  # no align: shipped pins, placeholders included, against fixture sources
-    with pytest.raises(RuntimeError, match="candidate source identity mismatch: agent_control_plane.bounded"):
-        module.load_executor_runtime()  # CP is checked first; the shipped CP is not a fixture commit either
-    assert len(calls) == 1 and not marker.exists()
+# Real merge SHAs: positive/negative proofs ------------------------------------------------------------------------------------
+def test_p1_odes_and_pack_pins_are_the_merges_not_their_parents_or_r3_values():
+    pins = ARCHITECT_VERIFIED_P1_PINS
+    assert pins["ODES_REVISION"] not in {P1_ODES_PARENT, ARCHITECT_VERIFIED_R3_PINS["ODES_REVISION"]}
+    assert pins["EVIDENCE_PACK_REVISION"] != ARCHITECT_VERIFIED_R3_PINS["EVIDENCE_PACK_REVISION"]  # the Pack #67 parent is the r3 Pack
+    assert P1_PACK_PARENT == ARCHITECT_VERIFIED_R3_PINS["EVIDENCE_PACK_REVISION"]
+    assert _is_commit_id(P1_ODES_PARENT) and _is_commit_id(P1_PACK_PARENT)
 
 
-@pytest.mark.skipif(not P1_UNRESOLVED, reason="all P1 pins are resolved")
-@pytest.mark.parametrize("const", sorted(set(P1_MODULES) - {"CP_REVISION", "REPLAY_REVISION"}))
-def test_p1_unresolved_each_placeholder_alone_blocks_load(p1_module, monkeypatch, const):
-    module, _, _, marker, _, align = p1_module
-    if const not in P1_UNRESOLVED:
-        pytest.skip("component resolved")
+# Each of the six pins: prefix, upper-case, padded, suffixed and altered forms of the correct identity are refused.
+def _variants(good):
+    flipped = good[:-1] + ("0" if good[-1] != "0" else "1")
+    return {"prefix7": good[:7], "prefix39": good[:-1], "upper": good.upper(), "lead-space": " " + good, "trail-space": good + " ",
+            "trail-newline": good + "\n", "suffix": good + "0", "altered": flipped, "refname": "refs/heads/main", "abbrev-ref": "HEAD"}
+
+
+@pytest.mark.parametrize("variant", sorted(_variants("a" * 40)))
+@pytest.mark.parametrize("const, module_name", _CHANGED)
+def test_p1_non_exact_forms_of_each_pin_are_refused(p1_module, monkeypatch, const, module_name, variant):
+    module, _, revisions, marker, calls, align = p1_module
     align()
-    monkeypatch.setattr(module, const, ARCHITECT_VERIFIED_P1_PINS[const])  # restore the shipped placeholder for this component only
-    assert not _is_commit_id(getattr(module, const))
-    with pytest.raises(RuntimeError, match=f"candidate source identity mismatch: {P1_MODULES[const]}"):
+    good = revisions[dict(_R3_KEYMAP)[const]]
+    value = _variants(good)[variant]
+    if variant == "upper":
+        assert value != good  # fixture commit ids contain at least one hex letter in practice
+    monkeypatch.setattr(module, const, value)
+    with pytest.raises(RuntimeError, match=f"candidate source identity mismatch: {module_name}"):
         module.load_executor_runtime()
     assert not marker.exists()
+
+
+# Mixed generation with the exact real values: ODES #145 parent, the r3 ODES/Replay/CP, and each swapped alone against an aligned tuple.
+@pytest.mark.parametrize("const, value, module_name", [
+    ("ODES_REVISION", P1_ODES_PARENT, "odes.exporter"),
+    ("ODES_REVISION", ARCHITECT_VERIFIED_R3_PINS["ODES_REVISION"], "odes.exporter"),
+    ("EVIDENCE_PACK_REVISION", P1_PACK_PARENT, "agent_governance_evidence_pack.importer"),
+    ("REPLAY_REVISION", "fe848cf1e4f6ee272712edc63f5d4bbbfc4e66a7", "agent_replay_bundle.importers"),  # Replay #87 head, not the #88 merge
+    ("REPLAY_REVISION", ARCHITECT_VERIFIED_R3_PINS["REPLAY_REVISION"], "agent_replay_bundle.importers"),
+    ("CP_REVISION", ARCHITECT_VERIFIED_R3_PINS["CP_REVISION"], "agent_control_plane.bounded"),
+])
+def test_p1_real_neighbouring_revisions_are_refused(p1_module, monkeypatch, const, value, module_name):
+    module, _, _, marker, _, align = p1_module
+    align()
+    assert value != ARCHITECT_VERIFIED_P1_PINS[const]
+    monkeypatch.setattr(module, const, value)
+    with pytest.raises(RuntimeError, match=f"candidate source identity mismatch: {module_name}"):
+        module.load_executor_runtime()
+    assert not marker.exists()
+
+
+def test_p1_p1_cp_with_r3_replay_and_odes_is_refused(p1_module, monkeypatch):
+    module, _, _, marker, _, align = p1_module
+    align("CP_REVISION")  # P1 CP stays as shipped (not a fixture commit); aligned others
+    for const in ("REPLAY_REVISION", "ODES_REVISION"):
+        monkeypatch.setattr(module, const, ARCHITECT_VERIFIED_R3_PINS[const])
+    assert module.CP_REVISION == ARCHITECT_VERIFIED_P1_PINS["CP_REVISION"]
+    with pytest.raises(RuntimeError, match="candidate source identity mismatch: agent_control_plane.bounded"):
+        module.load_executor_runtime()
+    align()
+    for const in ("REPLAY_REVISION", "ODES_REVISION"):
+        monkeypatch.setattr(module, const, ARCHITECT_VERIFIED_R3_PINS[const])
+    with pytest.raises(RuntimeError, match="candidate source identity mismatch: agent_replay_bundle.importers"):  # P1 CP aligned, r3 Replay/ODES
+        module.load_executor_runtime()
+    assert not marker.exists()
+
+
+# The shipped (unaligned) tuple is refused against sources that are not the pinned commits, naming the first component (CP).
+def test_p1_shipped_tuple_refuses_unpinned_sources(p1_module):
+    module, _, _, marker, calls, _ = p1_module
+    with pytest.raises(RuntimeError, match="candidate source identity mismatch: agent_control_plane.bounded"):
+        module.load_executor_runtime()
+    assert len(calls) == 1 and not marker.exists()

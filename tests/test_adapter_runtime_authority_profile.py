@@ -19,6 +19,7 @@ from experiments.odex_gax_imx_reference import gax_ref_runtime as rt
 from tests.test_governed_message_transport import LATER, NOW, message, queue, transport
 
 P2 = "security-runtime-p2-20261018"
+P1_PROFILE = "security-runtime-p1-20261105"
 HISTORICAL = ["persistence-v1", "merged-producers-v1", "typed-refusal-candidate-20261015"]
 GOOD = {"catalogue_version": "c1", "actions": {"refund_issue_routine": {"class_id": "k"}}}
 OTHER = {"catalogue_version": "c2", "actions": {"refund_issue_routine": {"class_id": "k"}}}
@@ -54,8 +55,8 @@ class FakeProfile:
         return bool(self.data.get("allow_synthetic_resolver", False))
 
 
-@pytest.fixture
-def set_profile(monkeypatch):
+@pytest.fixture(params=[P2, P1_PROFILE])
+def set_profile(request, monkeypatch):
     parent = types.ModuleType("agent_control_plane")
     parent.__path__ = []
     mod = types.ModuleType("agent_control_plane.runtime_authority")
@@ -67,7 +68,7 @@ def set_profile(monkeypatch):
 
     def use(name):
         monkeypatch.setattr(rt, "RUNTIME_COMPATIBILITY_PROFILE", name)
-    use(P2)
+    use(request.param)
     return use
 
 

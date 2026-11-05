@@ -1,6 +1,6 @@
 # Authenticated source and authoritative manifest (strict profiles)
 
-Applies to every strict-source profile: `typed-refusal-candidate-20261015` and the seven security runtime profiles.
+Applies to every strict-source profile: `typed-refusal-candidate-20261015` and the eight security runtime profiles.
 Non-strict profiles keep the ambient import and the caller manifest unchanged.
 
 ## What is authenticated

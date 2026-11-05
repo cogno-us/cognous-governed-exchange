@@ -139,11 +139,29 @@ elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-current-20261031-r3":
     REPLAY_REVISION = "6f45e288ae37ec7e7712f9296760927d2d843bba"
     ODES_REVISION = "d461f0ba3feccef3593ab6efdbf930569d669767"
     EVIDENCE_PACK_REVISION = "39fecb004f3d4c4e87673d79d8d9399314f551e4"
+elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-p1-20261105":
+    # P1 generation (Control Plane 484fdbd2 stack), a NEW profile added beside "security-runtime-current-20261031-r3"
+    # (kept byte-unchanged; one name never denotes two tuples; r2, r3, current and p2 are all unchanged). Exact revisions
+    # only (no ranges, no wildcards): Control Plane 484fdbd2, Runtime f7a55e2a, Manifest fa170815 and Replay 93a76e28 (merge
+    # of PR #88). The CP_REVISION below is the control_plane_revision label this module hands to Replay (import_replay_bundle),
+    # so Replay must accept it as a supported label. PROVISIONAL DEVELOPMENT PINS, NOT ADOPTED. It records which tuple the strict
+    # source-identity check accepts; it does not certify the tuple, makes no Registry or Verifier authentication claim (neither
+    # is consumed or verified by the Exchange) and changes no default. No other profile is affected; no permissive fallback.
+    # The r2 profile comment on git replace refs (refs/replace) and its known residuals applies unchanged to every strict profile.
+    # DRAFT PLACEHOLDERS: ODES_REVISION and EVIDENCE_PACK_REVISION are deliberately NOT 40-hex commit ids until the ODES and
+    # Evidence Pack re-pins to Replay 93a76e28 merge; the strict check refuses them fail closed. Must not merge until both
+    # are replaced by the real merge SHAs (same commit as the test literals).
+    CP_REVISION = "484fdbd297235dd24148ddb0703f2055a31eabff"
+    MOLTBOT_REVISION = "f7a55e2a8494801e49193f9f46935f0a971c248d"
+    MANIFEST_REVISION = "fa170815ef96a54c233d0dd9da821b60debabf8b"
+    REPLAY_REVISION = "93a76e281fcae6a65d2cd1d35376f87442dafb95"
+    ODES_REVISION = "PENDING-ODES-O*-MERGE-SHA"
+    EVIDENCE_PACK_REVISION = "PENDING-PACK-K*-MERGE-SHA"
 elif RUNTIME_COMPATIBILITY_PROFILE != "persistence-v1":
     raise RuntimeError("unsupported GAX runtime compatibility profile")
 
 # Profiles that require trusted runtime-authority configuration.
-SECURITY_RUNTIME_PROFILES = frozenset({"security-runtime-candidate-20261016", "security-runtime-f5b-20261016", "security-runtime-p4-20261017", "security-runtime-p2-20261018", "security-runtime-current-20261031", "security-runtime-current-20261031-r2", "security-runtime-current-20261031-r3"})
+SECURITY_RUNTIME_PROFILES = frozenset({"security-runtime-candidate-20261016", "security-runtime-f5b-20261016", "security-runtime-p4-20261017", "security-runtime-p2-20261018", "security-runtime-current-20261031", "security-runtime-current-20261031-r2", "security-runtime-current-20261031-r3", "security-runtime-p1-20261105"})
 # Profiles whose candidate sources are verified before import.
 STRICT_SOURCE_PROFILES = frozenset({"typed-refusal-candidate-20261015", *SECURITY_RUNTIME_PROFILES})
 # Strict profiles authenticate pinned source IN PROCESS (authenticated_source.py): the pinned commit id is the anchor, the

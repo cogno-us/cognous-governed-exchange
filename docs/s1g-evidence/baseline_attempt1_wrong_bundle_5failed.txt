@@ -1,0 +1,91 @@
+........................................................................ [ 11%]
+........................................................................ [ 23%]
+........................................................................ [ 34%]
+........................................................................ [ 46%]
+........................................................................ [ 58%]
+........................................................................ [ 69%]
+........................................................................ [ 81%]
+........................................................................ [ 92%]
+.........FFFFF............................ss                             [100%]
+=================================== FAILURES ===================================
+___________ test_sp1_native_blocked_expected_native_pass_unreachable ___________
+
+    @real_stack
+    def test_sp1_native_blocked_expected_native_pass_unreachable():
+        """SP1 native: BLOCKED. A real-ODES package from the CP2 bundle, signed with a SYNTHETIC key, full synthetic policy, trusted
+        digest and fixed clock, is REFUSED with GAX-RELIANCE-ODES-FAIL: risk_metadata {} makes restricted/prohibited True and
+        jurisdiction unknown, and metadata freshness is fixed unknown, so authority_status_and_freshness and consumption_conditions
+        block. This is evidence of the blocker, NOT a pass and NOT a native positive."""
+        out = run_real("sp1")
+>       assert out["verdict"] == "REFUSE" and out["reason"] == "GAX-RELIANCE-ODES-FAIL" and out["grant"] is None, out
+E       AssertionError: {'verdict': 'REFUSE', 'reason': 'GAX-RELIANCE-SOURCE-MISMATCH', 'grant': None, 'detail': 'package pinned_revisions.control_plane does not equal the authenticated GAX tuple', ...}
+E       assert ('REFUSE' == 'REFUSE'
+E         
+E           REFUSE and 'GAX-RELIANCE-SOURCE-MISMATCH' == 'GAX-RELIANCE-ODES-FAIL'
+E         
+E         - GAX-RELIANCE-ODES-FAIL
+E         + GAX-RELIANCE-SOURCE-MISMATCH)
+
+tests/test_odes_reliance_gate.py:488: AssertionError
+_ test_nc1_n5b_shaped_resealed_replay_pin_passes_declared_and_integrity_but_fails_replay_semantics _
+
+    @real_stack
+    def test_nc1_n5b_shaped_resealed_replay_pin_passes_declared_and_integrity_but_fails_replay_semantics():
+        out = run_real("nc1")
+        assert out["differs_from_original"]
+        assert out["raw"]["declared_profile_conformance"] == "pass" and out["raw"]["package_content_integrity"] == "pass", out["raw"]
+>       assert out["raw"]["replay_semantic_consistency"] == "fail" and out["raw"]["recipient_reliance_decision"] == "fail", out["raw"]
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'replay_semantic_consistency'
+
+tests/test_odes_reliance_gate.py:498: KeyError
+_ test_nc2_foreign_generation_package_from_the_pinned_replay_example_is_refused _
+
+    @real_stack
+    def test_nc2_foreign_generation_package_from_the_pinned_replay_example_is_refused():
+        out = run_real("nc2")
+>       assert out["profiles"][0] != out["profiles"][1], out["profiles"]                  # a different generation/profile than the CP2 package
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: ['odes_cognous_stack_export_0_1', 'odes_cognous_stack_export_0_1']
+E       assert 'odes_cognous_stack_export_0_1' != 'odes_cognous_stack_export_0_1'
+
+tests/test_odes_reliance_gate.py:505: AssertionError
+___ test_nc3_substituted_package_is_refused_against_the_cp2_expected_digest ____
+
+    @real_stack
+    def test_nc3_substituted_package_is_refused_against_the_cp2_expected_digest():
+        out = run_real("nc3")
+>       assert out["verdict"] == "REFUSE" and out["reason"] == "GAX-RELIANCE-BINDING-MISMATCH" and out["grant"] is None, out
+E       AssertionError: {'verdict': 'REFUSE', 'reason': 'GAX-RELIANCE-SOURCE-MISMATCH', 'grant': None, 'detail': 'package pinned_revisions.control_plane does not equal the authenticated GAX tuple', ...}
+E       assert ('REFUSE' == 'REFUSE'
+E         
+E           REFUSE and 'GAX-RELIANCE-SOURCE-MISMATCH' == 'GAX-RELIANCE...DING-MISMATCH'
+E         
+E         - GAX-RELIANCE-BINDING-MISMATCH
+E         ?              ^^^^^^^
+E         + GAX-RELIANCE-SOURCE-MISMATCH
+E         ?              ^^^^^^)
+
+tests/test_odes_reliance_gate.py:513: AssertionError
+_ test_nc4_resealed_stored_pass_is_accepted_by_retention_but_the_gate_reevaluates_and_refuses _
+
+    @real_stack
+    def test_nc4_resealed_stored_pass_is_accepted_by_retention_but_the_gate_reevaluates_and_refuses():
+        out = run_real("nc4")
+        assert out["genuine_stored_status"] != "pass"                                      # the real stored verdict is not a pass
+        assert out["stored_status"] == "pass" and out["validate"] is None                  # forged stored pass: retention validation ACCEPTS it
+>       assert out["verdict"] == "REFUSE" and out["grant"] is None and out["reason"] == "GAX-RELIANCE-ODES-FAIL", out
+E       AssertionError: {'genuine_stored_status': 'fail', 'stored_status': 'pass', 'validate': None, 'verdict': 'REFUSE', ...}
+E       assert ('REFUSE' == 'REFUSE'
+E         
+E           REFUSE and None is None and 'GAX-RELIANCE-SOURCE-MISMATCH' == 'GAX-RELIANCE-ODES-FAIL'
+E         
+E         - GAX-RELIANCE-ODES-FAIL
+E         + GAX-RELIANCE-SOURCE-MISMATCH)
+
+tests/test_odes_reliance_gate.py:522: AssertionError
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_real_pinned_stack.py:78: GAX_REAL_STACK_ROOT not set (real pinned checkouts unavailable)
+SKIPPED [1] tests/test_real_pinned_stack.py:90: GAX_REAL_STACK_ROOT not set (real pinned checkouts unavailable)
+5 failed, 613 passed, 2 skipped in 285.55s (0:04:45)
+exit=1

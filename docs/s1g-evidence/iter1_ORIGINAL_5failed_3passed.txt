@@ -1,0 +1,96 @@
+.F.FF.FF                                                                 [100%]
+=================================== FAILURES ===================================
+_______________ test_t1_native_positive_cp_replay_odes_gax_grant _______________
+
+new_root = '/tmp/claude-0/-home-user/ccd68d4a-ce44-5311-af5a-04bf66a9f467/scratchpad/s1g/stack'
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-88/test_t1_native_positive_cp_rep0')
+
+    def test_t1_native_positive_cp_replay_odes_gax_grant(new_root, tmp_path):
+        o = run("t1", new_root, NEW_PROFILE, tmp_path)
+        s = o["sources"]
+        assert (s["odes_commit"], s["odes_revision_constant"], s["gax_profile"]) == (ODES_DRAFT, ODES_DRAFT, NEW_PROFILE)
+        assert (s["cp"], s["replay"], s["manifest"], s["moltbot"]) == (P1["CP_REVISION"], P1["REPLAY_REVISION"], P1["MANIFEST_REVISION"], P1["MOLTBOT_REVISION"])
+        assert o["risk_in_bundle"]["jurisdiction"] == "SYNTHETIC-JURISDICTION-NONPRODUCTION" and o["risk_in_bundle"]["restricted_use_flag"] is False
+>       assert o["profile"] == LIFECYCLE_ID and o["has_lifecycle"] and o["package_digest"] == ANCHOR["current"]
+E       AssertionError: assert ('odes_cognous...lifecycle_0_1' == 'odes_cognous...lifecycle_0_1'
+E         
+E         Skipping 45 identical leading characters in diff, use -v to show
+E           fecycle_0_1 and True and 'sha256:4bd21...bb4d42d7da027' == 'sha256:eaa56...72fb650cc288c'
+E         
+E         - sha256:eaa5615380d79d177999bda91442fbca6a677c25c4afb4a041e72fb650cc288c
+E         + sha256:4bd21a72d539faa22dc463e4663a7cda73931d4128d683c1e50bb4d42d7da027)
+
+tests/test_odes_lifecycle_reliance.py:87: AssertionError
+___________________ test_t3_recipient_revoked_status_refuses ___________________
+
+new_root = '/tmp/claude-0/-home-user/ccd68d4a-ce44-5311-af5a-04bf66a9f467/scratchpad/s1g/stack'
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-88/test_t3_recipient_revoked_stat0')
+
+    def test_t3_recipient_revoked_status_refuses(new_root, tmp_path):
+        o = run("t3", new_root, NEW_PROFILE, tmp_path)
+>       assert o["package_digest"] == ANCHOR["current"]
+E       AssertionError: assert 'sha256:c6c83...dddc9df1940a5' == 'sha256:eaa56...72fb650cc288c'
+E         
+E         - sha256:eaa5615380d79d177999bda91442fbca6a677c25c4afb4a041e72fb650cc288c
+E         + sha256:c6c83ab08a948351cc8be3ba3dd606a3ca23756a4b56978dd08dddc9df1940a5
+
+tests/test_odes_lifecycle_reliance.py:111: AssertionError
+_ test_t4_stale_record_side_lifecycle_refuses_despite_favorable_recipient_inputs _
+
+new_root = '/tmp/claude-0/-home-user/ccd68d4a-ce44-5311-af5a-04bf66a9f467/scratchpad/s1g/stack'
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-88/test_t4_stale_record_side_life0')
+
+    def test_t4_stale_record_side_lifecycle_refuses_despite_favorable_recipient_inputs(new_root, tmp_path):
+        o = run("t4", new_root, NEW_PROFILE, tmp_path)
+>       assert o["package_digest"] == ANCHOR["stale"] and o["record_status"]["freshness"] == "stale"
+E       AssertionError: assert ('sha256:95171...996405a7479ad' == 'sha256:a3485...759ad3f48fee9'
+E         
+E         - sha256:a34854b8b52ed2e120ee2ddc259cb9c9bc4fcf78dfa151fee6b759ad3f48fee9
+E         + sha256:95171974404c124ba1624cb2bb5fe333a455e7d138ee3e97a3b996405a7479ad)
+
+tests/test_odes_lifecycle_reliance.py:119: AssertionError
+_ test_t5_legacy_and_restrictions_profiles_retain_outcomes_and_source_bindings _
+
+new_root = '/tmp/claude-0/-home-user/ccd68d4a-ce44-5311-af5a-04bf66a9f467/scratchpad/s1g/stack'
+old_root = '/tmp/claude-0/-home-user/ccd68d4a-ce44-5311-af5a-04bf66a9f467/scratchpad/s1/stack'
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-88/test_t5_legacy_and_restriction0')
+
+    def test_t5_legacy_and_restrictions_profiles_retain_outcomes_and_source_bindings(new_root, old_root, tmp_path):
+        new = run("t5", new_root, NEW_PROFILE, tmp_path)
+        old = run("t5", old_root, P1_PROFILE, tmp_path)
+        assert new["sources"]["odes_commit"] == ODES_DRAFT and old["sources"]["odes_commit"] == ODES_OLD and old["sources"]["gax_profile"] == P1_PROFILE
+        assert set(new["modes"]) == set(old["modes"]) == {"legacy", "explicit"}
+        for mode in ("legacy", "explicit"):
+            n, p = new["modes"][mode], old["modes"][mode]
+            for key in ("profile", "version", "package_digest", "pinned", "manifest_digest_pkg", "verdict", "reason", "blocking_layers", "raw", "has_lifecycle"):
+>               assert n[key] == p[key], (mode, key, n[key], p[key])
+E               AssertionError: ('legacy', 'package_digest', 'sha256:97f3c48a76bfe756970b24d10eb8ef2372c8b57a841f810a42001f84ee4cf7ee', 'sha256:311763f05088a62e38181f95f9f6f49041c2910f11563d42117b0c5912c19e1c')
+E               assert 'sha256:97f3c...01f84ee4cf7ee' == 'sha256:31176...b0c5912c19e1c'
+E                 
+E                 - sha256:311763f05088a62e38181f95f9f6f49041c2910f11563d42117b0c5912c19e1c
+E                 + sha256:97f3c48a76bfe756970b24d10eb8ef2372c8b57a841f810a42001f84ee4cf7ee
+
+tests/test_odes_lifecycle_reliance.py:150: AssertionError
+_________ test_t6_old_odes_pin_cannot_grant_for_the_lifecycle_package __________
+
+new_root = '/tmp/claude-0/-home-user/ccd68d4a-ce44-5311-af5a-04bf66a9f467/scratchpad/s1g/stack'
+old_root = '/tmp/claude-0/-home-user/ccd68d4a-ce44-5311-af5a-04bf66a9f467/scratchpad/s1/stack'
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-88/test_t6_old_odes_pin_cannot_gr0')
+
+    def test_t6_old_odes_pin_cannot_grant_for_the_lifecycle_package(new_root, old_root, tmp_path):
+        made = run("t1", new_root, NEW_PROFILE, tmp_path)
+>       assert made["verdict"] == "GRANT"          # precondition: the package is genuinely GRANT-able under the new pin
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: assert 'REFUSE' == 'GRANT'
+E         
+E         - GRANT
+E         + REFUSE
+
+tests/test_odes_lifecycle_reliance.py:160: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_odes_lifecycle_reliance.py::test_t1_native_positive_cp_replay_odes_gax_grant
+FAILED tests/test_odes_lifecycle_reliance.py::test_t3_recipient_revoked_status_refuses
+FAILED tests/test_odes_lifecycle_reliance.py::test_t4_stale_record_side_lifecycle_refuses_despite_favorable_recipient_inputs
+FAILED tests/test_odes_lifecycle_reliance.py::test_t5_legacy_and_restrictions_profiles_retain_outcomes_and_source_bindings
+FAILED tests/test_odes_lifecycle_reliance.py::test_t6_old_odes_pin_cannot_grant_for_the_lifecycle_package
+5 failed, 3 passed in 16.18s

@@ -1437,7 +1437,11 @@ def test_p1_registration_in_both_gate_sets_and_beside_r3(monkeypatch):
     module = _load_with_profile(monkeypatch, P1_PROFILE)
     assert {P1_PROFILE, R3_PROFILE, R2_PROFILE} <= module.SECURITY_RUNTIME_PROFILES
     assert {P1_PROFILE, R3_PROFILE, R2_PROFILE} <= module.STRICT_SOURCE_PROFILES
-    assert len(module.SECURITY_RUNTIME_PROFILES) == 8
+    # S1G: exactly nine registered security runtime profiles (the eighth, P1, is unchanged; the ninth is the S1G development lifecycle profile).
+    assert module.SECURITY_RUNTIME_PROFILES == frozenset({
+        "security-runtime-candidate-20261016", "security-runtime-f5b-20261016", "security-runtime-p4-20261017", "security-runtime-p2-20261018",
+        "security-runtime-current-20261031", R2_PROFILE, R3_PROFILE, P1_PROFILE, "security-runtime-p1-lifecycle-20261107"})
+    assert len(module.SECURITY_RUNTIME_PROFILES) == 9
     with pytest.raises(ValueError, match="requires trusted runtime_authority_profile"):
         module._workflow_options(None)
 

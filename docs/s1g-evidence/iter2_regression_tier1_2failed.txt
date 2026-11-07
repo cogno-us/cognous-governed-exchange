@@ -1,0 +1,86 @@
+........................................................................ [  3%]
+........................................................................ [  6%]
+........................................................................ [ 10%]
+.................................................................sssssss [ 13%]
+ss.sssssssss.sssssssss.................................................. [ 16%]
+........................................................................ [ 20%]
+........................................................................ [ 23%]
+........................................................................ [ 26%]
+........................................................................ [ 30%]
+........................................................................ [ 33%]
+........................................................................ [ 36%]
+..................................................................sssss. [ 40%]
+...................s....s............................................... [ 43%]
+.....................s....s............................................. [ 46%]
+........................................................................ [ 50%]
+..........................................F............................. [ 53%]
+.................................sF..................................... [ 56%]
+........................................................................ [ 60%]
+........................................................................ [ 63%]
+...............ssss.ss.................................................. [ 67%]
+........................................................................ [ 70%]
+........................................................................ [ 73%]
+........................................................................ [ 77%]
+........................................................................ [ 80%]
+........................................................................ [ 83%]
+........................................................................ [ 87%]
+........................................................................ [ 90%]
+........................................................................ [ 93%]
+........................ssssss..............................ss.......... [ 97%]
+............................................................             [100%]
+=================================== FAILURES ===================================
+_____________ test_p1_registration_in_both_gate_sets_and_beside_r3 _____________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fa912dd7930>
+
+    def test_p1_registration_in_both_gate_sets_and_beside_r3(monkeypatch):
+        module = _load_with_profile(monkeypatch, P1_PROFILE)
+        assert {P1_PROFILE, R3_PROFILE, R2_PROFILE} <= module.SECURITY_RUNTIME_PROFILES
+        assert {P1_PROFILE, R3_PROFILE, R2_PROFILE} <= module.STRICT_SOURCE_PROFILES
+>       assert len(module.SECURITY_RUNTIME_PROFILES) == 8
+E       AssertionError: assert 9 == 8
+E        +  where 9 = len(frozenset({'security-runtime-candidate-20261016', 'security-runtime-current-20261031', 'security-runtime-current-20261031-r2', 'security-runtime-current-20261031-r3', 'security-runtime-f5b-20261016', 'security-runtime-p1-20261105', ...}))
+E        +    where frozenset({'security-runtime-candidate-20261016', 'security-runtime-current-20261031', 'security-runtime-current-20261031-r2', 'security-runtime-current-20261031-r3', 'security-runtime-f5b-20261016', 'security-runtime-p1-20261105', ...}) = <module 'experiments.odex_gax_imx_reference._profile_probe' from '/tmp/claude-0/-home-user/ccd68d4a-ce44-5311-af5a-04bf66a9f467/scratchpad/s1g/impl/experiments/odex_gax_imx_reference/gax_ref_runtime.py'>.SECURITY_RUNTIME_PROFILES
+
+tests/test_exchange_input_and_source_repairs.py:1440: AssertionError
+__________ test_p1_gax_remains_tenantless_no_gax_side_effect_identity __________
+
+    def test_p1_gax_remains_tenantless_no_gax_side_effect_identity():
+        # GAX never computes an effect id and builds tenantless proposals; strict-generation effects cannot execute through runtime or GAX.
+        needles = ("ten" + "ant_id", "ten" + "ant_generation", "strict-" + "tenant", "strict_" + "tenant")
+        root = Path(runtime.__file__).resolve().parents[2]
+        for sub in ("experiments", "tests", "docs"):
+            for path in (root / sub).rglob("*"):
+                if path.suffix in {".py", ".md", ".json"} and path.is_file():
+                    text = path.read_text(errors="ignore")
+>                   assert not any(n in text for n in needles), path
+E                   AssertionError: PosixPath('/tmp/claude-0/-home-user/ccd68d4a-ce44-5311-af5a-04bf66a9f467/scratchpad/s1g/impl/tests/data/s1g_lifecycle/reconstruction_bundle.json')
+E                   assert not True
+E                    +  where True = any(<generator object test_p1_gax_remains_tenantless_no_gax_side_effect_identity.<locals>.<genexpr> at 0x7fa912d118a0>)
+
+tests/test_exchange_input_and_source_repairs.py:1609: AssertionError
+=========================== short test summary info ============================
+SKIPPED [9] tests/test_authenticated_manifest.py:198: run_actual_outcome calls run_exchange without runtime_authority_profile: usable only under the typed-refusal profile
+SKIPPED [9] tests/test_authenticated_manifest.py:219: run_actual_outcome calls run_exchange without runtime_authority_profile: usable only under the typed-refusal profile
+SKIPPED [9] tests/test_authenticated_manifest.py:252: run_demo calls run_exchange without runtime_authority_profile: usable only under the typed-refusal profile
+SKIPPED [1] tests/test_exchange_input_and_source_repairs.py:864: all r2 pins are resolved
+SKIPPED [4] tests/test_exchange_input_and_source_repairs.py:873: all r2 pins are resolved
+SKIPPED [2] tests/test_exchange_input_and_source_repairs.py:934: same commit in both generations: not a substitution
+SKIPPED [2] tests/test_exchange_input_and_source_repairs.py:1014: same commit in both generations: not a substitution
+SKIPPED [1] tests/test_exchange_input_and_source_repairs.py:1588: opt-in: set GAX_P1_REPLAY_SRC to <Replay 93a76e28 checkout>/src
+SKIPPED [1] tests/test_odes_lifecycle_reliance.py:81: GAX_S1G_STACK_ROOT not set
+SKIPPED [1] tests/test_odes_lifecycle_reliance.py:100: GAX_S1G_STACK_ROOT not set
+SKIPPED [1] tests/test_odes_lifecycle_reliance.py:110: GAX_S1G_STACK_ROOT not set
+SKIPPED [1] tests/test_odes_lifecycle_reliance.py:118: GAX_S1G_STACK_ROOT not set
+SKIPPED [1] tests/test_odes_lifecycle_reliance.py:143: GAX_S1G_STACK_ROOT not set
+SKIPPED [1] tests/test_odes_lifecycle_reliance.py:159: GAX_S1G_STACK_ROOT not set
+SKIPPED [1] tests/test_odes_reliance_gate.py:481: GAX_RELIANCE_REAL_STACK_ROOT and GAX_RELIANCE_CP2_BUNDLE not both set
+SKIPPED [1] tests/test_odes_reliance_gate.py:493: GAX_RELIANCE_REAL_STACK_ROOT and GAX_RELIANCE_CP2_BUNDLE not both set
+SKIPPED [1] tests/test_odes_reliance_gate.py:502: GAX_RELIANCE_REAL_STACK_ROOT and GAX_RELIANCE_CP2_BUNDLE not both set
+SKIPPED [1] tests/test_odes_reliance_gate.py:510: GAX_RELIANCE_REAL_STACK_ROOT and GAX_RELIANCE_CP2_BUNDLE not both set
+SKIPPED [1] tests/test_odes_reliance_gate.py:517: GAX_RELIANCE_REAL_STACK_ROOT and GAX_RELIANCE_CP2_BUNDLE not both set
+SKIPPED [1] tests/test_odes_reliance_gate.py:525: GAX_RELIANCE_REAL_STACK_ROOT and GAX_RELIANCE_CP2_BUNDLE not both set
+SKIPPED [1] tests/test_real_pinned_stack.py:78: GAX_REAL_STACK_ROOT not set (real pinned checkouts unavailable)
+SKIPPED [1] tests/test_real_pinned_stack.py:90: GAX_REAL_STACK_ROOT not set (real pinned checkouts unavailable)
+2 failed, 2095 passed, 51 skipped in 197.40s (0:03:17)
+exit=1

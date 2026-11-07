@@ -1,0 +1,44 @@
+........................................................................ [  3%]
+........................................................................ [  6%]
+........................................................................ [ 10%]
+.................................................................sssssss [ 13%]
+ss.sssssssss.sssssssss.................................................. [ 16%]
+..................................................EEEEEEEEEEEEEEEEEEEEEE [ 20%]
+EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE.FFFFFF [ 23%]
+FFEEFEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE [ 26%]
+EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE........................EEEEEEEEEEEEEEE [ 30%]
+EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE [ 33%]
+EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE............................. [ 36%]
+....EEEEEEEEEE........EEEEEEE.....................................sssssE [ 40%]
+EEEEEEE......EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE......EEEE..... [ 43%]
+...............EEEEEEEEEEEEEEEEEEEEEEEEEE....EEEEEEEEEEEEEEEEEEEEEEEEEEE [ 46%]
+EEEEEEEEEEEEEEEEEEEE.......................EEEEEEEEEEEEEEEEEEEEEEEEEEEEE [ 50%]
+EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE....F.....................EEEEEEEE [ 53%]
+EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE.sF.EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE [ 56%]
+EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE........................................ [ 60%]
+........................................................................ [ 63%]
+...............ssss.ssEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE [ 67%]
+EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE [ 70%]
+EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE [ 73%]
+EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE [ 77%]
+EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE [ 80%]
+EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE [ 83%]
+EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE [ 87%]
+EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE [ 90%]
+EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE [ 93%]
+EEEEEEEEEEEEEEEEEEEEEEEEssssssEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEss.......... [ 97%]
+...EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE.......             [100%]
+==================================== ERRORS ====================================
+_ ERROR at setup of test_import_marker_never_executes_before_verification_at_any_entry_point[security-runtime-current-20261031-r2-synthetic_policy] _
+
+request = <SubRequest 'world' for <Function test_import_marker_never_executes_before_verification_at_any_entry_point[security-runtime-current-20261031-r2-synthetic_policy]>>
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-92/test_import_marker_never_execu31')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fbaab352900>
+
+    @pytest.fixture(params=sorted(runtime.STRICT_SOURCE_PROFILES))
+    def world(request, tmp_path, monkeypatch):
+        """Every strict profile (the security-critical scenarios)."""
+... [truncated; the original run was 161304 lines of repeated 'too many open files' signing errors] ...
+SKIPPED [1] tests/test_real_pinned_stack.py:90: GAX_REAL_STACK_ROOT not set (real pinned checkouts unavailable)
+11 failed, 720 passed, 47 skipped, 1370 errors in 241.35s (0:04:01)
+exit=1

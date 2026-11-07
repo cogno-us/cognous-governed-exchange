@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import copy
 import dataclasses
 import importlib
 import importlib.machinery
@@ -12,6 +13,7 @@ import os
 import sqlite3
 import sys
 import uuid
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -154,11 +156,23 @@ elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-p1-20261105":
     REPLAY_REVISION = "93a76e281fcae6a65d2cd1d35376f87442dafb95"
     ODES_REVISION = "1e2261289e8ff8e862b697f5c7afcf7007453787"
     EVIDENCE_PACK_REVISION = "065150852cc2a8abeb748777bb69d72ccd0e03d8"
+elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-p1-lifecycle-20261107":
+    # S1G DEVELOPMENT profile, a NEW name beside "security-runtime-p1-20261105" (kept byte-unchanged; one name never denotes two
+    # tuples). It is the P1 tuple EXCEPT ODES: ODES_REVISION is the DRAFT, UNMERGED, UNQUALIFIED head cafec03f of ODES PR #146, which
+    # carries the opt-in lifecycle profile odes_cognous_stack_export_0_2_restrictions_lifecycle_0_1. The ODES pin is PROVISIONAL and
+    # exists only on a draft branch; it must be re-tied (a new profile name) if the ODES change merges at another revision.
+    # DEVELOPMENT ONLY, NOT ADOPTED, makes no qualification claim, changes no default, and adds no permission or effect path.
+    CP_REVISION = "484fdbd297235dd24148ddb0703f2055a31eabff"
+    MOLTBOT_REVISION = "f7a55e2a8494801e49193f9f46935f0a971c248d"
+    MANIFEST_REVISION = "fa170815ef96a54c233d0dd9da821b60debabf8b"
+    REPLAY_REVISION = "93a76e281fcae6a65d2cd1d35376f87442dafb95"
+    ODES_REVISION = "cafec03f71d0f822b783f7463fcd8144c90829d5"
+    EVIDENCE_PACK_REVISION = "065150852cc2a8abeb748777bb69d72ccd0e03d8"
 elif RUNTIME_COMPATIBILITY_PROFILE != "persistence-v1":
     raise RuntimeError("unsupported GAX runtime compatibility profile")
 
 # Profiles that require trusted runtime-authority configuration.
-SECURITY_RUNTIME_PROFILES = frozenset({"security-runtime-candidate-20261016", "security-runtime-f5b-20261016", "security-runtime-p4-20261017", "security-runtime-p2-20261018", "security-runtime-current-20261031", "security-runtime-current-20261031-r2", "security-runtime-current-20261031-r3", "security-runtime-p1-20261105"})
+SECURITY_RUNTIME_PROFILES = frozenset({"security-runtime-candidate-20261016", "security-runtime-f5b-20261016", "security-runtime-p4-20261017", "security-runtime-p2-20261018", "security-runtime-current-20261031", "security-runtime-current-20261031-r2", "security-runtime-current-20261031-r3", "security-runtime-p1-20261105", "security-runtime-p1-lifecycle-20261107"})
 # Profiles whose candidate sources are verified before import.
 STRICT_SOURCE_PROFILES = frozenset({"typed-refusal-candidate-20261015", *SECURITY_RUNTIME_PROFILES})
 # Strict profiles authenticate pinned source IN PROCESS (authenticated_source.py): the pinned commit id is the anchor, the
@@ -585,6 +599,222 @@ def export_odes_reference(manifest: dict[str, Any], reconstruction_bundle: dict[
     }
     validation = evaluate_recipient_package(package, policy)
     return {"odes_package": package, "recipient_validation": validation, "recipient_policy": policy, "exchange_metadata": {"note": "additional exchange metadata is outside the digest-covered ODES package"}}
+
+
+# --- ODES reliance gate (S1, DEVELOPMENT ONLY, UNQUALIFIED, NOT ADOPTED) -------------------------------------------------
+# Additive, explicitly invoked, non-effecting. Nothing in assess_message, receipt, retention, run_exchange or the transport
+# calls it. A GRANT is a reliance record only: it is NOT Control Plane authorization, institutional authority or Runtime
+# effect permission. See docs/odes-reliance-gate.md.
+RELIANCE_GATE_CONTRACT = "gax-odes-reliance-gate/0.1.0-dev"
+RELIANCE_GATE_NOTICE = (
+    "Development contract, UNQUALIFIED and NOT ADOPTED. A GRANT is evidence-reliance only; it is not Control Plane "
+    "authorization, institutional authority or Runtime effect permission, and it is not persisted by this function."
+)
+_RELIANCE_REPLAY_BYPASS_ENV = "ODES_ALLOW_UNVERIFIED_REPLAY"
+_RELIANCE_POLICY_KEYS = frozenset({
+    "now", "purpose", "relying_party", "jurisdiction", "supported_profiles", "evaluation_scope", "status_max_age_seconds",
+    "trusted_issuer", "trusted_digests", "trusted_key_refs", "status_inputs", "detached_authentication", "native_evidence"})
+_RELIANCE_SOURCE_KEYS = (("control_plane", "CP_REVISION"), ("replay", "REPLAY_REVISION"),
+                         ("manifest", "MANIFEST_REVISION"), ("moltbot_safe", "MOLTBOT_REVISION"))
+
+
+class _RelianceRefusal(Exception):
+    def __init__(self, code: str, detail: str, **extra: Any) -> None:
+        super().__init__(detail)
+        self.code, self.detail, self.extra = code, detail, extra
+
+
+def _reliance_refuse(code: str, detail: str, **extra: Any) -> None:
+    raise _RelianceRefusal(code, detail, **extra)
+
+
+def _is_sha256_ref(value: Any) -> bool:
+    return (isinstance(value, str) and len(value) == 71 and value.startswith("sha256:")
+            and all(c in "0123456789abcdef" for c in value[7:]))
+
+
+def _reliance_str_list(value: Any) -> bool:
+    return isinstance(value, list) and bool(value) and all(isinstance(x, str) and x for x in value)
+
+
+def _reliance_time(value: Any, name: str):
+    if not isinstance(value, str) or not value:
+        _reliance_refuse("GAX-RELIANCE-TIME-INVALID", f"{name} must be a non-empty ISO-8601 string with a timezone")
+    try:
+        return parse_time(value)
+    except (ValueError, TypeError, AttributeError):
+        _reliance_refuse("GAX-RELIANCE-TIME-INVALID", f"{name} is not a valid timezone-aware timestamp")
+
+
+def _reliance_authenticated_odes() -> Any:
+    """The pinned ODES module, only from GAX's authenticated detached copy of ODES_REVISION; otherwise refuse."""
+    if not _is_strict():
+        _reliance_refuse("GAX-RELIANCE-UNAVAILABLE", "reliance gate requires a strict source profile; the ODES evaluator cannot be authenticated")
+    try:
+        odes = pinned_module("odes")
+        source = _SOURCES.get("odes")
+        if (source is None or source.materialized.commit != ODES_REVISION
+                or not _auth.is_loaded_verified("odes", source.materialized.path)
+                or _auth.module_problems("odes", source.materialized.path)):
+            _reliance_refuse("GAX-RELIANCE-UNAVAILABLE", "the ODES evaluator is not the authenticated pinned copy")
+        evaluator = getattr(odes, "evaluate_recipient_package", None)
+    except _RelianceRefusal:
+        raise
+    except Exception as exc:  # source-identity or loader failure: never fall back to an ambient module
+        _reliance_refuse("GAX-RELIANCE-UNAVAILABLE", f"authenticated ODES evaluator unavailable ({type(exc).__name__})")
+    if not callable(evaluator):
+        _reliance_refuse("GAX-RELIANCE-UNAVAILABLE", "authenticated ODES module has no evaluate_recipient_package")
+    return evaluator
+
+
+def _reliance_source_binding(package: dict[str, Any]) -> dict[str, Any]:
+    provenance = package.get("provenance")
+    pinned = provenance.get("pinned_revisions") if isinstance(provenance, dict) else None
+    if not isinstance(pinned, dict):
+        _reliance_refuse("GAX-RELIANCE-SOURCE-MISMATCH", "package carries no pinned_revisions; source identity NOT ESTABLISHED")
+    bound: dict[str, str] = {}
+    for key, constant in _RELIANCE_SOURCE_KEYS:
+        expected = globals()[constant]
+        if pinned.get(key) != expected:
+            _reliance_refuse("GAX-RELIANCE-SOURCE-MISMATCH", f"package pinned_revisions.{key} does not equal the authenticated GAX tuple")
+        bound[key] = expected
+    artifacts = provenance.get("source_artifacts")
+    manifest_digest = artifacts.get("manifest_digest") if isinstance(artifacts, dict) else None
+    authenticated_digest = _strict_manifest().digest
+    if manifest_digest != authenticated_digest:
+        _reliance_refuse("GAX-RELIANCE-SOURCE-MISMATCH", "package manifest_digest does not equal the authenticated manifest digest (open #280 basis is not normalized)")
+    bound["manifest_digest"] = authenticated_digest
+    return bound
+
+
+def _reliance_checked_policy(policy: Any, *, now: str, expected_digest: str, relying_party: str, purpose: str,
+                             profile: str) -> dict[str, Any]:
+    if not isinstance(policy, dict) or not policy:
+        _reliance_refuse("GAX-RELIANCE-POLICY-MISSING", "an explicit recipient-supplied policy is required")
+    effective = copy.deepcopy(policy)
+    # ODES silently ignores unknown policy keys; the gate does not pass any it has not reviewed (informational inspection and
+    # the trusted_package_digests alias are deliberately not accepted for a reliance decision).
+    unknown = sorted(str(key) for key in effective if key not in _RELIANCE_POLICY_KEYS)
+    if unknown:
+        _reliance_refuse("GAX-RELIANCE-POLICY-INVALID", f"policy contains keys the reliance gate does not accept: {', '.join(unknown)}")
+    if "now" in effective and effective["now"] != now:
+        _reliance_refuse("GAX-RELIANCE-POLICY-INVALID", "policy now differs from the trusted evaluation time")
+    effective["now"] = now
+    if not _reliance_str_list(effective.get("supported_profiles")) or profile not in effective["supported_profiles"]:
+        _reliance_refuse("GAX-RELIANCE-POLICY-INVALID", "policy supported_profiles must be an explicit list containing the expected profile")
+    if effective.get("relying_party") != relying_party or effective.get("purpose") != purpose:
+        _reliance_refuse("GAX-RELIANCE-BINDING-MISMATCH", "policy relying_party/purpose differ from the expected relying party/purpose")
+    if not _reliance_str_list(effective.get("trusted_digests")) or expected_digest not in effective["trusted_digests"]:
+        _reliance_refuse("GAX-RELIANCE-ANCHOR-MISSING", "policy trusted_digests must contain the independently supplied expected package digest")
+    authentication = effective.get("detached_authentication")
+    if not isinstance(authentication, dict) or not authentication.get("envelope") or not authentication.get("trusted_keys"):
+        _reliance_refuse("GAX-RELIANCE-POLICY-INVALID", "policy needs detached_authentication with an envelope and recipient trusted_keys; empty trust anchors are not authentication")
+    if not isinstance(effective.get("status_inputs"), dict) or not effective["status_inputs"]:
+        _reliance_refuse("GAX-RELIANCE-POLICY-INVALID", "policy needs non-empty recipient status_inputs")
+    for key in ("trusted_issuer", "jurisdiction", "evaluation_scope"):
+        if not effective.get(key):
+            _reliance_refuse("GAX-RELIANCE-POLICY-INVALID", f"policy needs {key}")
+    max_age = effective.get("status_max_age_seconds")
+    if type(max_age) is not int or max_age < 0:
+        _reliance_refuse("GAX-RELIANCE-POLICY-INVALID", "policy status_max_age_seconds must be a non-negative integer")
+    return effective
+
+
+def consume_odes_reliance(package: Any, *, policy: Any, policy_id: Any, policy_version: Any, expected_package_digest: Any,
+                          expected_relying_party: Any, expected_purpose: Any, expected_profile: Any, now: Any,
+                          max_grant_seconds: Any) -> dict[str, Any]:
+    """Re-evaluate an ODES package at consumption time and return a versioned GRANT or REFUSE record.
+
+    Explicitly invoked and non-effecting: it persists nothing, calls no workflow and authorizes no action. The recipient
+    policy, the expected package digest (an anchor supplied independently of the package), the relying party, purpose,
+    profile, the trusted evaluation time and the maximum grant lifetime are all caller inputs; none is defaulted or derived
+    from the package. Only the freshly computed native final status "pass" can yield GRANT, and only if every GAX-side
+    binding also holds. Any failure, exception or unknown shape is a typed GAX-RELIANCE-* REFUSE.
+    """
+    record: dict[str, Any] = {"contract": RELIANCE_GATE_CONTRACT, "notice": RELIANCE_GATE_NOTICE}
+    try:
+        bindings = _consume_odes_reliance(package, policy, policy_id, policy_version, expected_package_digest,
+                                          expected_relying_party, expected_purpose, expected_profile, now, max_grant_seconds)
+    except _RelianceRefusal as refusal:
+        record.update({"verdict": "REFUSE", "reason": refusal.code, "detail": refusal.detail, "grant": None})
+        record.update(refusal.extra)
+        return record
+    except Exception as exc:  # fail closed: nothing unexpected may become a grant
+        record.update({"verdict": "REFUSE", "reason": "GAX-RELIANCE-INDETERMINATE",
+                       "detail": f"unexpected {type(exc).__name__} during consumption-time evaluation", "grant": None})
+        return record
+    record.update({"verdict": "GRANT", "reason": None, "grant": bindings})
+    return record
+
+
+def _consume_odes_reliance(package: Any, policy: Any, policy_id: Any, policy_version: Any, expected_digest: Any,
+                           relying_party: Any, purpose: Any, profile: Any, now: Any, max_grant_seconds: Any) -> dict[str, Any]:
+    evaluator = _reliance_authenticated_odes()
+    if os.environ.get(_RELIANCE_REPLAY_BYPASS_ENV) not in (None, "", "0"):
+        _reliance_refuse("GAX-RELIANCE-REPLAY-BYPASS-ENABLED", f"{_RELIANCE_REPLAY_BYPASS_ENV} is set; the evaluator path is not trustworthy")
+    now_dt = _reliance_time(now, "now")
+    if not isinstance(package, dict) or not package:
+        _reliance_refuse("GAX-RELIANCE-INDETERMINATE", "package must be a non-empty ODES package object")
+    if not _is_sha256_ref(expected_digest):
+        _reliance_refuse("GAX-RELIANCE-ANCHOR-MISSING", "an independently supplied expected ODES package digest (sha256:<64 hex>) is required")
+    for name, value in (("policy_id", policy_id), ("policy_version", policy_version), ("expected_relying_party", relying_party),
+                        ("expected_purpose", purpose), ("expected_profile", profile)):
+        if not isinstance(value, str) or not value:
+            _reliance_refuse("GAX-RELIANCE-POLICY-INVALID" if name.startswith("policy_") else "GAX-RELIANCE-BINDING-MISMATCH",
+                             f"{name} is required")
+    if type(max_grant_seconds) is not int or max_grant_seconds <= 0:
+        _reliance_refuse("GAX-RELIANCE-TIME-INVALID", "max_grant_seconds must be a positive integer")
+    effective = _reliance_checked_policy(policy, now=now, expected_digest=expected_digest, relying_party=relying_party,
+                                         purpose=purpose, profile=profile)
+    package = copy.deepcopy(package)
+    declared = (package.get("profile") or {}).get("implementation_profile") if isinstance(package.get("profile"), dict) else None
+    if not isinstance(declared, str) or declared != profile:
+        _reliance_refuse("GAX-RELIANCE-BINDING-MISMATCH", "package declared profile differs from the expected profile")
+    if package.get("package_digest") != expected_digest:
+        _reliance_refuse("GAX-RELIANCE-BINDING-MISMATCH", "package_digest differs from the independently supplied expected digest")
+    source = _reliance_source_binding(package)
+
+    result = evaluator(package, effective)
+    decision = result.get("recipient_reliance_decision") if isinstance(result, dict) else None
+    status = decision.get("status") if isinstance(decision, dict) else None
+    if status not in ("pass", "informational_only", "fail"):
+        _reliance_refuse("GAX-RELIANCE-INDETERMINATE", "ODES returned no recognizable final recipient_reliance_decision status")
+    if status == "informational_only":
+        _reliance_refuse("GAX-RELIANCE-INFORMATIONAL-ONLY", "informational inspection is not reliance")
+    if status == "fail":
+        layers = (decision.get("evidence") or {}).get("blocking_layers") if isinstance(decision.get("evidence"), dict) else None
+        extra = {"blocking_layers": layers} if isinstance(layers, dict) else {}
+        _reliance_refuse("GAX-RELIANCE-ODES-FAIL", "native final recipient_reliance_decision is fail", **extra)
+    # status == "pass": GAX-side bindings must also hold; ODES PASS alone is never sufficient.
+    integrity = result.get("package_content_integrity")
+    recomputed = ((integrity or {}).get("evidence") or {}).get("package_digest") if isinstance(integrity, dict) else None
+    if recomputed != expected_digest:
+        _reliance_refuse("GAX-RELIANCE-BINDING-MISMATCH", "ODES-recomputed package digest does not equal the expected digest")
+    replay_layer = result.get("replay_semantic_consistency")
+    if not isinstance(replay_layer, dict) or replay_layer.get("status") != "pass":
+        _reliance_refuse("GAX-RELIANCE-INDETERMINATE", "replay_semantic_consistency is absent or not pass for the Replay-bound profile")
+    conditions = package["record"].get("consumption_conditions") if isinstance(package.get("record"), dict) else None
+    record_expiry = conditions.get("expires_at") if isinstance(conditions, dict) else None
+    status_inputs = effective["status_inputs"]
+    evaluated_at = _reliance_time(status_inputs.get("evaluated_at"), "status_inputs.evaluated_at")
+    limits = [now_dt + timedelta(seconds=max_grant_seconds),
+              evaluated_at + timedelta(seconds=effective["status_max_age_seconds"]),
+              _reliance_time(record_expiry, "package record expires_at")]
+    valid_until = min(limits)
+    if valid_until <= now_dt:
+        _reliance_refuse("GAX-RELIANCE-STALE", "no positive validity interval remains")
+    return {
+        "odes_package_digest": expected_digest,
+        "odes_package_digest_note": "native ODES package_digest; distinct from the GAX retained-artifact digest and any stored validation digest",
+        "fresh_validation_digest": digest(result),
+        "profile": declared,
+        "policy": {"id": policy_id, "version": policy_version, "digest": digest(effective),
+                   "note": "id/version are caller labels (unauthenticated); the digest binds the policy content"},
+        "relying_party": relying_party, "purpose": purpose,
+        "evaluated_at": now_dt.isoformat().replace("+00:00", "Z"),
+        "valid_until": valid_until.isoformat().replace("+00:00", "Z"),
+        "source": {**source, "odes_evaluator_revision": ODES_REVISION, "gax_compatibility_profile": RUNTIME_COMPATIBILITY_PROFILE},
+    }
 
 
 def _artifact_facts(odes_reference: dict[str, Any]) -> dict[str, Any]:

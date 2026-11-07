@@ -1,0 +1,6 @@
+{
+ "lifecycle_control_plane_run.json": "bb29adafd657a0855ed0e8fd69c6825888163103f23b59f8a302705d074f60f7",
+ "lifecycle_proposal.json": "02ddf4a3c305fb0db8dec1ba233473df9b88bb3ad076b005125b52b68bb29295",
+ "note": "SYNTHETIC / NONPRODUCTION. sha256 of the lifecycle CP fixtures as they exist in the authenticated ODES draft checkout cafec03f71d0f822b783f7463fcd8144c90829d5 under tests/data/lifecycle_generation/. They are read from the pinned ODES checkout and are NOT copied into this repository (they carry Control Plane strict-generation identity content that GAX tests forbid in this tree).",
+ "odes_revision": "cafec03f71d0f822b783f7463fcd8144c90829d5"
+}

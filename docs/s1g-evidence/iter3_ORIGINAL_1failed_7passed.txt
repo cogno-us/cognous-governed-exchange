@@ -1,0 +1,25 @@
+.......F                                                                 [100%]
+=================================== FAILURES ===================================
+_________ test_t6_old_odes_pin_cannot_grant_for_the_lifecycle_package __________
+
+new_root = '/tmp/claude-0/-home-user/ccd68d4a-ce44-5311-af5a-04bf66a9f467/scratchpad/s1g/stack'
+old_root = '/tmp/claude-0/-home-user/ccd68d4a-ce44-5311-af5a-04bf66a9f467/scratchpad/s1/stack'
+prepared = (PosixPath('/tmp/pytest-of-root/pytest-96/s1g0'), {'current': 'sha256:d4892d3db7c9a6cd29380d277cf4d220c868b2ab6585b63c2871f6c0bea7a056', 'stale': 'sha256:5168af530b11cd56f9d50fdc24628069262c9c26ebaf683130caa4fc5d7b54d8'})
+
+    def test_t6_old_odes_pin_cannot_grant_for_the_lifecycle_package(new_root, old_root, prepared):
+        tmp_path, ANCHOR = prepared
+        made = run("t1", new_root, NEW_PROFILE, tmp_path)
+        assert made["verdict"] == "GRANT"          # precondition: the package is genuinely GRANT-able under the new pin
+        o = run("t6", old_root, P1_PROFILE, tmp_path)
+        assert o["sources"]["odes_commit"] == ODES_OLD and o["sources"]["gax_profile"] == P1_PROFILE
+        assert o["profile"] == LIFECYCLE_ID and o["package_digest"] == ANCHOR["current"]
+        assert o["verdict"] == "REFUSE" and o["grant"] is None and o["reason"] in {"GAX-RELIANCE-ODES-FAIL", "GAX-RELIANCE-INDETERMINATE"}, o
+>       assert o["raw"]["declared_profile_conformance"] != "pass" and o["raw"]["recipient_reliance_decision"] != "pass", o["raw"]   # refused because the old evaluator does not support the profile
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: {'schema_validity': 'pass', 'declared_profile_conformance': 'pass', 'package_content_integrity': 'pass', 'integrity_authentication_checks': 'pass', ...}
+E       assert ('pass' != 'pass')
+
+tests/test_odes_lifecycle_reliance.py:199: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_odes_lifecycle_reliance.py::test_t6_old_odes_pin_cannot_grant_for_the_lifecycle_package
+1 failed, 7 passed in 24.05s

@@ -156,11 +156,23 @@ elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-p1-20261105":
     REPLAY_REVISION = "93a76e281fcae6a65d2cd1d35376f87442dafb95"
     ODES_REVISION = "1e2261289e8ff8e862b697f5c7afcf7007453787"
     EVIDENCE_PACK_REVISION = "065150852cc2a8abeb748777bb69d72ccd0e03d8"
+elif RUNTIME_COMPATIBILITY_PROFILE == "security-runtime-p1-lifecycle-20261107":
+    # S1G DEVELOPMENT profile, a NEW name beside "security-runtime-p1-20261105" (kept byte-unchanged; one name never denotes two
+    # tuples). It is the P1 tuple EXCEPT ODES: ODES_REVISION is the DRAFT, UNMERGED, UNQUALIFIED head cafec03f of ODES PR #146, which
+    # carries the opt-in lifecycle profile odes_cognous_stack_export_0_2_restrictions_lifecycle_0_1. The ODES pin is PROVISIONAL and
+    # exists only on a draft branch; it must be re-tied (a new profile name) if the ODES change merges at another revision.
+    # DEVELOPMENT ONLY, NOT ADOPTED, makes no qualification claim, changes no default, and adds no permission or effect path.
+    CP_REVISION = "484fdbd297235dd24148ddb0703f2055a31eabff"
+    MOLTBOT_REVISION = "f7a55e2a8494801e49193f9f46935f0a971c248d"
+    MANIFEST_REVISION = "fa170815ef96a54c233d0dd9da821b60debabf8b"
+    REPLAY_REVISION = "93a76e281fcae6a65d2cd1d35376f87442dafb95"
+    ODES_REVISION = "cafec03f71d0f822b783f7463fcd8144c90829d5"
+    EVIDENCE_PACK_REVISION = "065150852cc2a8abeb748777bb69d72ccd0e03d8"
 elif RUNTIME_COMPATIBILITY_PROFILE != "persistence-v1":
     raise RuntimeError("unsupported GAX runtime compatibility profile")
 
 # Profiles that require trusted runtime-authority configuration.
-SECURITY_RUNTIME_PROFILES = frozenset({"security-runtime-candidate-20261016", "security-runtime-f5b-20261016", "security-runtime-p4-20261017", "security-runtime-p2-20261018", "security-runtime-current-20261031", "security-runtime-current-20261031-r2", "security-runtime-current-20261031-r3", "security-runtime-p1-20261105"})
+SECURITY_RUNTIME_PROFILES = frozenset({"security-runtime-candidate-20261016", "security-runtime-f5b-20261016", "security-runtime-p4-20261017", "security-runtime-p2-20261018", "security-runtime-current-20261031", "security-runtime-current-20261031-r2", "security-runtime-current-20261031-r3", "security-runtime-p1-20261105", "security-runtime-p1-lifecycle-20261107"})
 # Profiles whose candidate sources are verified before import.
 STRICT_SOURCE_PROFILES = frozenset({"typed-refusal-candidate-20261015", *SECURITY_RUNTIME_PROFILES})
 # Strict profiles authenticate pinned source IN PROCESS (authenticated_source.py): the pinned commit id is the anchor, the

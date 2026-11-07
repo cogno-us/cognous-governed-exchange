@@ -14,8 +14,8 @@ T2 rewritten/resealed/re-signed package, T3 revoked status, T4 stale lifecycle, 
 run, including the adverse ones (iteration 1: 5 failed; iteration 3: 1 failed), and `tests/data/s1g_lifecycle/PROVENANCE.md` for the anchor sequence and its limits.
 
 ## Findings and residuals
-- Existing `test_p1_registration_in_both_gate_sets_and_beside_r3` asserts exactly 8 security runtime profiles and now fails (9). Unavoidable consequence of registering the profile; the original oracle
-  was NOT edited. An Architect-approved one-line update is required before merge.
+- `test_p1_registration_in_both_gate_sets_and_beside_r3` asserted exactly 8 security runtime profiles and failed (9) after registration (also reproduced by CI on head 2e4285b8). Closeout
+  replaced the obsolete count with an exact nine-profile set assertion (Architect-approved); the P1 profile and every other expectation are unchanged.
 - The old ODES evaluator (1e226128) does not recognize the lifecycle profile id, produces no `replay_semantic_consistency` layer and returns native final pass when the policy lists the id. Only the
   gate's requirement that the layer be present and pass prevents a GRANT. That requirement is load-bearing.
 - Anchor separation is same-author and same-run (synthetic), not independent organizational trust. Fresh Replay imports are not digest-reproducible (random bundle_id/generated_at).

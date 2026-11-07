@@ -1,6 +1,6 @@
 ## S1G lifecycle profile, development (7 November 2026)
 
-- Add development profile `security-runtime-p1-lifecycle-20261107` (the P1 tuple with ODES draft cafec03f), six native tests and evidence. P1, `consume_odes_reliance` and all other profiles unchanged. See docs/odes-lifecycle-reliance-s1g.md. DEVELOPMENT ONLY, UNQUALIFIED, NOT ADOPTED. One existing test (profile-count assertion) now fails and is not edited.
+- Add development profile `security-runtime-p1-lifecycle-20261107` (the P1 tuple with ODES draft cafec03f), six native tests and evidence. P1, `consume_odes_reliance` and all other profiles unchanged. See docs/odes-lifecycle-reliance-s1g.md. DEVELOPMENT ONLY, UNQUALIFIED, NOT ADOPTED. The obsolete eight-profile count assertion was replaced by an exact nine-profile set assertion.
 
 ## ODES reliance gate, development contract (7 November 2026)
 

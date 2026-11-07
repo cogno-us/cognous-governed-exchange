@@ -1,0 +1,55 @@
+........................................................................ [  3%]
+........................................................................ [  6%]
+........................................................................ [ 10%]
+.................................................................sssssss [ 13%]
+ss.sssssssss.sssssssss.................................................. [ 16%]
+........................................................................ [ 20%]
+........................................................................ [ 23%]
+........................................................................ [ 26%]
+........................................................................ [ 30%]
+........................................................................ [ 33%]
+........................................................................ [ 36%]
+..................................................................sssss. [ 40%]
+...................s....s............................................... [ 43%]
+.....................s....s............................................. [ 46%]
+........................................................................ [ 50%]
+........................................................................ [ 53%]
+.................................s...................................... [ 56%]
+........................................................................ [ 60%]
+........................................................................ [ 63%]
+...............ssss.ss.................................................. [ 67%]
+........................................................................ [ 70%]
+........................................................................ [ 73%]
+........................................................................ [ 77%]
+........................................................................ [ 80%]
+........................................................................ [ 83%]
+........................................................................ [ 87%]
+........................................................................ [ 90%]
+........................................................................ [ 93%]
+........................ssssss..............................ss.......... [ 97%]
+............................................................             [100%]
+=========================== short test summary info ============================
+SKIPPED [9] tests/test_authenticated_manifest.py:198: run_actual_outcome calls run_exchange without runtime_authority_profile: usable only under the typed-refusal profile
+SKIPPED [9] tests/test_authenticated_manifest.py:219: run_actual_outcome calls run_exchange without runtime_authority_profile: usable only under the typed-refusal profile
+SKIPPED [9] tests/test_authenticated_manifest.py:252: run_demo calls run_exchange without runtime_authority_profile: usable only under the typed-refusal profile
+SKIPPED [1] tests/test_exchange_input_and_source_repairs.py:864: all r2 pins are resolved
+SKIPPED [4] tests/test_exchange_input_and_source_repairs.py:873: all r2 pins are resolved
+SKIPPED [2] tests/test_exchange_input_and_source_repairs.py:934: same commit in both generations: not a substitution
+SKIPPED [2] tests/test_exchange_input_and_source_repairs.py:1014: same commit in both generations: not a substitution
+SKIPPED [1] tests/test_exchange_input_and_source_repairs.py:1592: opt-in: set GAX_P1_REPLAY_SRC to <Replay 93a76e28 checkout>/src
+SKIPPED [1] tests/test_odes_lifecycle_reliance.py:105: GAX_S1G_STACK_ROOT not set
+SKIPPED [1] tests/test_odes_lifecycle_reliance.py:125: GAX_S1G_STACK_ROOT not set
+SKIPPED [1] tests/test_odes_lifecycle_reliance.py:136: GAX_S1G_STACK_ROOT not set
+SKIPPED [1] tests/test_odes_lifecycle_reliance.py:146: GAX_S1G_STACK_ROOT not set
+SKIPPED [1] tests/test_odes_lifecycle_reliance.py:173: GAX_S1G_STACK_ROOT not set
+SKIPPED [1] tests/test_odes_lifecycle_reliance.py:191: GAX_S1G_STACK_ROOT not set
+SKIPPED [1] tests/test_odes_reliance_gate.py:481: GAX_RELIANCE_REAL_STACK_ROOT and GAX_RELIANCE_CP2_BUNDLE not both set
+SKIPPED [1] tests/test_odes_reliance_gate.py:493: GAX_RELIANCE_REAL_STACK_ROOT and GAX_RELIANCE_CP2_BUNDLE not both set
+SKIPPED [1] tests/test_odes_reliance_gate.py:502: GAX_RELIANCE_REAL_STACK_ROOT and GAX_RELIANCE_CP2_BUNDLE not both set
+SKIPPED [1] tests/test_odes_reliance_gate.py:510: GAX_RELIANCE_REAL_STACK_ROOT and GAX_RELIANCE_CP2_BUNDLE not both set
+SKIPPED [1] tests/test_odes_reliance_gate.py:517: GAX_RELIANCE_REAL_STACK_ROOT and GAX_RELIANCE_CP2_BUNDLE not both set
+SKIPPED [1] tests/test_odes_reliance_gate.py:525: GAX_RELIANCE_REAL_STACK_ROOT and GAX_RELIANCE_CP2_BUNDLE not both set
+SKIPPED [1] tests/test_real_pinned_stack.py:78: GAX_REAL_STACK_ROOT not set (real pinned checkouts unavailable)
+SKIPPED [1] tests/test_real_pinned_stack.py:90: GAX_REAL_STACK_ROOT not set (real pinned checkouts unavailable)
+2097 passed, 51 skipped in 238.80s (0:03:58)
+exit=0
